@@ -139,6 +139,24 @@ function App() {
   const [clockNow, setClockNow] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const [showLoginGate, setShowLoginGate] = useState(false);
+  const [loginGateFeature, setLoginGateFeature] = useState('');
+
+  // Tabs that require login before opening
+  const protectedTabs = ['CustomerManagement','ProductServiceManagement','InvoiceManagement',
+    'QuotationManagement','PaymentManagement','PaymentTracking','TaxManagement',
+    'InventoryManagement','ReportsAnalytics','UserManagement','NotificationsManagement',
+    'DocumentManagement','AccountingManagement','SubscriptionManagement','EcommerceIntegration',
+    'AdminPanel','AdvancedFeatures','AIFeatures','POSBilling','Dashboard','AdminShops','ProfileSettings'];
+
+  const handleFeatureClick = (tab, featureName) => {
+    if (!user && protectedTabs.includes(tab)) {
+      setLoginGateFeature(featureName || tab);
+      setShowLoginGate(true);
+      return;
+    }
+    setActiveTab(tab);
+  };
 
   const searchableFeatures = [
     { tab: 'AdminPanel', icon: '⚙️', name: 'Admin Panel & Settings', keywords: 'system tax invoice currency backup user permission settings' },
@@ -240,11 +258,11 @@ function App() {
           <nav className="navbar">
             <div className="nav-brand">
               {user && <button type="button" className="workspace-menu-toggle" aria-label="Open workspace features" aria-expanded={showWorkspaceMenu} onClick={() => setShowWorkspaceMenu(open => !open)}><Menu size={20} /></button>}
-              <span className="rainbow-text logo">YourBill</span>
+              <span className="rainbow-text logo" style={{cursor:'pointer'}} onClick={() => setActiveTab('Home')}>YourBill</span>
             </div>
             <div className="nav-links">
               <button className={`nav-link ${activeTab === 'Home' ? 'active' : ''}`} onClick={() => setActiveTab('Home')}><House size={16} aria-hidden="true" /> Main</button>
-              <button className={`nav-link ${activeTab === 'Dashboard' ? 'active' : ''}`} onClick={() => setActiveTab('Dashboard')}><LayoutDashboard size={16} aria-hidden="true" /> Dashboard</button>
+              <button className={`nav-link ${activeTab === 'Dashboard' ? 'active' : ''}`} onClick={() => handleFeatureClick('Dashboard', 'Dashboard')}><LayoutDashboard size={16} aria-hidden="true" /> Dashboard</button>
               <button className={`nav-link ${activeTab === 'Explore' ? 'active' : ''}`} onClick={() => setActiveTab('Explore')}><Compass size={16} aria-hidden="true" /> Explore</button>
               <button className={`nav-link ${activeTab === 'Login' ? 'active' : ''}`} onClick={() => setActiveTab('Login')}><LogIn size={16} aria-hidden="true" /> Login</button>
               <button className={`nav-link ${activeTab === 'Registration' ? 'active' : ''}`} onClick={() => setActiveTab('Registration')}><UserPlus size={16} aria-hidden="true" /> Registration</button>
@@ -449,7 +467,7 @@ function App() {
                       <div className="curved-bg-top"></div>
                       <div className="buyer-cascade">
                         {buyerFeatures.map((feature, index) => (
-                          <div key={index} className={`cascade-item cascade-${index + 1}`} onClick={() => setActiveTab(categoryTabMap[feature.category] || 'Login')} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setActiveTab(categoryTabMap[feature.category] || 'Login'); } }}>
+                          <div key={index} className={`cascade-item cascade-${index + 1}`} onClick={() => handleFeatureClick(categoryTabMap[feature.category] || 'Login', feature.category)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleFeatureClick(categoryTabMap[feature.category] || 'Login', feature.category); } }}>
                             <div className="feature-icon"><FeatureIcon icon={feature.icon} /></div>
                             <h4>{feature.category}</h4>
                           </div>
@@ -468,7 +486,7 @@ function App() {
                       {sellerFeatures.map((feature, index) => {
                         const isLargeCard = index === 2 || index === 5;
                         return (
-                          <div key={index} className={`bento-item bento-${index + 1} ${isLargeCard ? 'large-card' : ''}`} onClick={() => setActiveTab(categoryTabMap[feature.category] || 'Login')} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setActiveTab(categoryTabMap[feature.category] || 'Login'); } }}>
+                          <div key={index} className={`bento-item bento-${index + 1} ${isLargeCard ? 'large-card' : ''}`} onClick={() => handleFeatureClick(categoryTabMap[feature.category] || 'Login', feature.category)} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); handleFeatureClick(categoryTabMap[feature.category] || 'Login', feature.category); } }}>
                             <div className="feature-icon"><FeatureIcon icon={feature.icon} /></div>
                             <div className="feature-content">
                               <h3 className="feature-title">{feature.category}</h3>
@@ -606,6 +624,62 @@ function App() {
           <footer className="footer">
             <p>&copy; 2026 YourBill. Crafted with <span className="rainbow-text">innovation</span>.</p>
           </footer>
+        </div>
+      )}
+
+      {/* ── Login Gate Modal ── */}
+      {showLoginGate && (
+        <div
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', zIndex:9999,
+            display:'flex', alignItems:'center', justifyContent:'center', backdropFilter:'blur(4px)' }}
+          onClick={() => setShowLoginGate(false)}
+          role="dialog" aria-modal="true" aria-label="Login required"
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ background:'var(--glass-bg, #fff)', border:'1px solid var(--glass-border, #ddd)',
+              borderRadius:'18px', padding:'2.5rem 2rem', width:'min(420px, 92vw)',
+              boxShadow:'0 24px 80px rgba(0,0,0,0.25)', textAlign:'center',
+              animation:'fadeInUp 0.25s ease' }}
+          >
+            <div style={{ fontSize:'2.8rem', marginBottom:'0.6rem' }}>🔐</div>
+            <h2 style={{ fontSize:'1.4rem', fontWeight:800, marginBottom:'0.4rem' }}>
+              Login Required
+            </h2>
+            <p style={{ color:'var(--text-secondary, #666)', marginBottom:'0.2rem', fontSize:'0.95rem' }}>
+              <strong style={{ color:'var(--text-primary, #111)' }}>{loginGateFeature}</strong> is a workspace feature.
+            </p>
+            <p style={{ color:'var(--text-secondary, #666)', marginBottom:'1.8rem', fontSize:'0.9rem' }}>
+              Please login or create a free account to access this feature.
+            </p>
+            <div style={{ display:'flex', gap:'0.75rem', justifyContent:'center', flexWrap:'wrap' }}>
+              <button
+                style={{ background:'linear-gradient(135deg,#7c3aed,#6b21a8)', color:'#fff',
+                  border:'none', borderRadius:'10px', padding:'0.75rem 1.8rem',
+                  fontWeight:700, fontSize:'1rem', cursor:'pointer', flex:1, minWidth:'120px' }}
+                onClick={() => { setShowLoginGate(false); setActiveTab('Login'); }}
+              >
+                <LogIn size={16} style={{marginRight:'6px', verticalAlign:'middle'}} />
+                Login
+              </button>
+              <button
+                style={{ background:'linear-gradient(135deg,#059669,#047857)', color:'#fff',
+                  border:'none', borderRadius:'10px', padding:'0.75rem 1.8rem',
+                  fontWeight:700, fontSize:'1rem', cursor:'pointer', flex:1, minWidth:'120px' }}
+                onClick={() => { setShowLoginGate(false); setActiveTab('Registration'); }}
+              >
+                <UserPlus size={16} style={{marginRight:'6px', verticalAlign:'middle'}} />
+                Register Free
+              </button>
+            </div>
+            <button
+              style={{ marginTop:'1.2rem', background:'transparent', border:'none',
+                color:'var(--text-secondary, #888)', cursor:'pointer', fontSize:'0.85rem' }}
+              onClick={() => setShowLoginGate(false)}
+            >
+              ✕ Close
+            </button>
+          </div>
         </div>
       )}
     </>

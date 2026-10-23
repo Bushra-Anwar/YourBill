@@ -89,37 +89,235 @@ export default function ReportsAnalytics({ onBack }) {
   };
 
   const handleExportCSV = () => {
-    const csvRows = [
-      ["Invoice Number", "Customer Name", "Date", "Items Count", "Subtotal", "Tax", "Grand Total", "Status"],
-      ...invoices.map(inv => [
-        inv.invoiceNumber,
-        `"${inv.customerName}"`,
-        new Date(inv.date).toLocaleDateString(),
-        inv.items?.length || 1,
-        inv.subtotal || 0,
-        inv.totalTax || 0,
-        inv.grandTotal || 0,
-        inv.paymentStatus || 'Paid'
-      ])
-    ];
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+    const timeStr = today.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
-    const csvContent = "data:text/csv;charset=utf-8," + csvRows.map(e => e.join(",")).join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Sales_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    // BOM for Excel compatibility with Indian characters
+    const BOM = '\uFEFF';
+
+    const rows = [];
+
+    // ── Report Header ──
+    rows.push(['YOURBILL — BUSINESS SALES REPORT', '', '', '', '', '', '', '']);
+    rows.push([`Generated On: ${dateStr} at ${timeStr}`, '', '', '', '', '', '', '']);
+    rows.push(['', '', '', '', '', '', '', '']);
+
+    // ── Summary Block ──
+    rows.push(['--- SUMMARY ---', '', '', '', '', '', '', '']);
+    rows.push(['Total Invoices', stats.invoiceCount, '', '', '', '', '', '']);
+    rows.push(['Total Billed (₹)', stats.totalSales.toFixed(2), '', '', '', '', '', '']);
+    rows.push(['Collected (₹)', stats.paidSales.toFixed(2), '', '', '', '', '', '']);
+    rows.push(['Outstanding (₹)', stats.outstanding.toFixed(2), '', '', '', '', '', '']);
+    rows.push(['This Month (₹)', stats.monthSales.toFixed(2), '', '', '', '', '', '']);
+    rows.push(['Today Sales (₹)', stats.todaySales.toFixed(2), '', '', '', '', '', '']);
+    rows.push(['', '', '', '', '', '', '', '']);
+
+    // ── Invoice Detail Table Header ──
+    rows.push(['--- INVOICE DETAIL ---', '', '', '', '', '', '', '']);
+    rows.push([
+      'Invoice No.',
+      'Customer Name',
+      'Invoice Date',
+      'Due Date',
+      'Items',
+      'Subtotal (₹)',
+      'CGST (₹)',
+      'SGST (₹)',
+      'Discount (₹)',
+      'Grand Total (₹)',
+      'Paid Amount (₹)',
+      'Balance Due (₹)',
+      'Payment Mode',
+      'Status'
+    ]);
+
+    // ── Invoice Rows ──
+    invoices.forEach(inv => {
+      const grandTotal = Number(inv.grandTotal || inv.totalAmount || inv.amount || 0);
+      const taxAmt = Number(inv.totalTax || 0);
+      rows.push([
+        inv.invoiceNumber || '—',
+        `"${inv.customerName || 'Walk-in Customer'}"`,
+        inv.date ? new Date(inv.date).toLocaleDateString('en-IN') : '—',
+        inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-IN') : '—',
+        inv.items?.length || 1,
+        Number(inv.subtotal || 0).toFixed(2),
+        Number(inv.cgstTotal ?? taxAmt / 2).toFixed(2),
+        Number(inv.sgstTotal ?? taxAmt / 2).toFixed(2),
+        Number(inv.discountAmount || 0).toFixed(2),
+        grandTotal.toFixed(2),
+        Number(inv.paidAmount || (inv.paymentStatus === 'Paid' ? grandTotal : 0)).toFixed(2),
+        Number(inv.balanceAmount ?? (inv.paymentStatus === 'Paid' ? 0 : grandTotal)).toFixed(2),
+        inv.paymentMethod || 'Cash',
+        inv.paymentStatus || inv.status || 'Unpaid'
+      ]);
+    });
+
+    rows.push(['', '', '', '', '', '', '', '']);
+    rows.push(['--- END OF REPORT ---', '', '', '', '', '', '', '']);
+    rows.push(['Powered by YourBill — yourbill.in', '', '', '', '', '', '', '']);
+
+    const csvContent = BOM + rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `YourBill_Sales_Report_${today.toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintReport = () => {
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+
+    const monthlySalesHtml = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() - (5 - i));
+      const sales = invoices.reduce((sum, inv) => {
+        const id = new Date(inv.date || inv.createdAt);
+        return id.getMonth() === d.getMonth() && id.getFullYear() === d.getFullYear()
+          ? sum + (Number(inv.grandTotal || inv.amount || 0) || 0) : sum;
+      }, 0);
+      return `<tr><td>${d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</td><td style="text-align:right">₹${sales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td></tr>`;
+    }).join('');
+
+    const invoiceRows = invoices.slice(0, 50).map((inv, idx) => {
+      const st = inv.paymentStatus || inv.status || 'Unpaid';
+      const color = st === 'Paid' ? '#166534' : st === 'Overdue' ? '#991b1b' : '#854d0e';
+      const bg   = st === 'Paid' ? '#dcfce7' : st === 'Overdue' ? '#fee2e2' : '#fef9c3';
+      return `<tr style="background:${idx % 2 === 0 ? '#fff' : '#f9fafb'}">
+        <td>${inv.invoiceNumber || '—'}</td>
+        <td>${new Date(inv.date || inv.createdAt).toLocaleDateString('en-IN')}</td>
+        <td>${inv.customerName || 'Walk-in'}</td>
+        <td style="text-align:right">₹${Number(inv.subtotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td style="text-align:right">₹${Number(inv.totalTax || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td style="text-align:right; font-weight:700">₹${Number(inv.grandTotal || inv.amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+        <td><span style="background:${bg};color:${color};padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">${st}</span></td>
+      </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>YourBill — Business Sales Report — ${dateStr}</title>
+<style>
+  @page { size: A4 portrait; margin: 14mm 16mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11pt; color: #111; background: #fff; }
+  .report-header { display: flex; justify-content: space-between; align-items: flex-start;
+    border-bottom: 3px solid #6b21a8; padding-bottom: 12pt; margin-bottom: 16pt; }
+  .company-name { font-size: 22pt; font-weight: 900; color: #6b21a8; }
+  .report-meta  { font-size: 9pt; color: #555; line-height: 1.6; }
+  .report-title { font-size: 14pt; font-weight: 700; text-align: right; text-transform: uppercase;
+    letter-spacing: 1pt; color: #6b21a8; margin-bottom: 6pt; }
+  .summary-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10pt; margin-bottom: 18pt; }
+  .summary-card { border: 1.5pt solid #e5e5e5; border-radius: 6pt; padding: 10pt 12pt; }
+  .summary-card .label { font-size: 8.5pt; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5pt; color: #666; margin-bottom: 4pt; }
+  .summary-card .value { font-size: 16pt; font-weight: 800; color: #111; }
+  .summary-card.purple { border-color: #6b21a8; }
+  .summary-card.purple .value { color: #6b21a8; }
+  .summary-card.green  { border-color: #16a34a; }
+  .summary-card.green  .value { color: #16a34a; }
+  .summary-card.orange { border-color: #ea580c; }
+  .summary-card.orange .value { color: #ea580c; }
+  h3 { font-size: 11pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5pt;
+    color: #333; margin-bottom: 8pt; border-left: 3pt solid #6b21a8; padding-left: 8pt; }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-bottom: 18pt; }
+  thead th { background: #6b21a8; color: #fff; font-weight: 700; font-size: 8.5pt;
+    padding: 6pt 8pt; text-align: left; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  tbody td { padding: 5pt 8pt; border-bottom: 0.5pt solid #e5e5e5; }
+  .monthly-table { width: 40%; }
+  .footer { margin-top: 18pt; border-top: 1pt solid #ddd; padding-top: 8pt;
+    display: flex; justify-content: space-between; font-size: 8pt; color: #888; }
+</style>
+</head>
+<body>
+
+<div class="report-header">
+  <div>
+    <div class="company-name">YourBill</div>
+    <div class="report-meta">Business Analytics Report<br>Generated: ${dateStr}</div>
+  </div>
+  <div>
+    <div class="report-title">Sales &amp; Revenue Report</div>
+    <div class="report-meta" style="text-align:right">Total Invoices: <strong>${stats.invoiceCount}</strong><br>Report Period: All Time</div>
+  </div>
+</div>
+
+<div class="summary-grid">
+  <div class="summary-card purple">
+    <div class="label">Total Billed</div>
+    <div class="value">₹${stats.totalSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+  </div>
+  <div class="summary-card green">
+    <div class="label">Collected</div>
+    <div class="value">₹${stats.paidSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+  </div>
+  <div class="summary-card orange">
+    <div class="label">Outstanding</div>
+    <div class="value">₹${stats.outstanding.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Today's Sales</div>
+    <div class="value">₹${stats.todaySales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">This Month</div>
+    <div class="value">₹${stats.monthSales.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Invoice Count</div>
+    <div class="value">${stats.invoiceCount}</div>
+  </div>
+</div>
+
+<h3>Monthly Revenue Trend</h3>
+<table class="monthly-table">
+  <thead><tr><th>Month</th><th style="text-align:right">Revenue (₹)</th></tr></thead>
+  <tbody>${monthlySalesHtml}</tbody>
+</table>
+
+<h3>Invoice Register (Last 50)</h3>
+<table>
+  <thead>
+    <tr>
+      <th>Invoice No.</th><th>Date</th><th>Customer</th>
+      <th style="text-align:right">Subtotal</th><th style="text-align:right">Tax</th>
+      <th style="text-align:right">Grand Total</th><th>Status</th>
+    </tr>
+  </thead>
+  <tbody>${invoiceRows || '<tr><td colspan="7" style="text-align:center;padding:12pt;color:#999">No invoices found.</td></tr>'}</tbody>
+</table>
+
+<div class="footer">
+  <span>YourBill — Business OS &nbsp;|&nbsp; yourbill.in</span>
+  <span>Page 1 of 1 &nbsp;|&nbsp; Confidential</span>
+</div>
+
+</body></html>`;
+
+    const win = window.open('', '_blank', 'width=900,height=700');
+    if (!win) { alert('Please allow popups for this site to print the report.'); return; }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 600);
   };
 
   const renderExportActions = () => (
     <div className="export-group">
-      <button className="export-btn" title="Export as PDF" onClick={() => window.print()}><FileText size={16} /> Print PDF</button>
-      <button className="export-btn" title="Export as CSV" onClick={handleExportCSV}><FileSpreadsheet size={16} /> CSV</button>
-      <button className="export-btn" title="Create an email draft with the current report totals" onClick={() => {
-        const body = [`Sales report`, `Invoices: ${stats.invoiceCount}`, `Total sales: ${stats.totalSales}`, `Paid sales: ${stats.paidSales}`, `Outstanding: ${stats.outstanding}`].join('\\n');
-        window.location.href = `mailto:?subject=${encodeURIComponent('YourBill sales report')}&body=${encodeURIComponent(body)}`;
+      <button className="export-btn" title="Print / Save as PDF" onClick={handlePrintReport}><FileText size={16} /> Print PDF</button>
+      <button className="export-btn" title="Export as CSV (Excel compatible)" onClick={handleExportCSV}><FileSpreadsheet size={16} /> CSV</button>
+      <button className="export-btn" title="Email report summary" onClick={() => {
+        const body = `YourBill Sales Report\n\nTotal Invoices: ${stats.invoiceCount}\nTotal Billed: ₹${stats.totalSales.toLocaleString('en-IN')}\nCollected: ₹${stats.paidSales.toLocaleString('en-IN')}\nOutstanding: ₹${stats.outstanding.toLocaleString('en-IN')}\nThis Month: ₹${stats.monthSales.toLocaleString('en-IN')}\n\nGenerated from YourBill — yourbill.in`;
+        window.location.href = `mailto:?subject=${encodeURIComponent('YourBill Sales Report')}&body=${encodeURIComponent(body)}`;
       }}><Mail size={16} /></button>
     </div>
   );
