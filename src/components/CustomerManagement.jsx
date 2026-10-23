@@ -1,10 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Users, UserPlus, CreditCard, FileText, Activity, 
-  MapPin, Phone, Mail, Building, Search, Filter, 
-  MoreVertical, Edit, Trash2, ChevronRight, Download, Upload,
-  Save, X
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Users, UserPlus, CreditCard, FileText, Activity, MapPin, Phone, Mail, Building, Search, Edit, Trash2, Download, Save, X } from 'lucide-react';
 import './CustomerManagement.css';
 import { customerApi } from '../api';
 
@@ -33,7 +28,7 @@ export default function CustomerManagement({ onBack }) {
     fetchCustomers();
   }, []);
 
-  const fetchCustomers = async () => {
+  async function fetchCustomers() {
     try {
       setLoading(true);
       const data = await customerApi.getAll();

@@ -1,9 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  CreditCard, Plus, Search, Filter, Download, MoreVertical, 
-  Printer, Mail, Smartphone, Landmark, Banknote, Wallet, 
-  CheckCircle, Clock, AlertCircle, RefreshCw, FileText, ArrowUpRight, Loader2
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { CreditCard, Plus, Search, Printer, Mail, Smartphone, Landmark, Banknote, AlertCircle, RefreshCw, ArrowUpRight } from 'lucide-react';
 import { paymentApi, customerApi, invoiceApi } from '../api';
 import './PaymentManagement.css';
 
@@ -29,7 +25,7 @@ export default function PaymentManagement({ onBack }) {
     loadData();
   }, []);
 
-  const loadData = async () => {
+  async function loadData() {
     setLoading(true);
     try {
       const [payData, custData, invData] = await Promise.all([
@@ -420,27 +416,27 @@ export default function PaymentManagement({ onBack }) {
         <div className="receipt-header-strip" style={{borderBottom:'2px solid var(--border-color)', paddingBottom:'1rem', marginBottom:'1.5rem', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
           <div>
             <h2 style={{margin:0, fontSize:'1.5rem', letterSpacing:'1px'}}>PAYMENT RECEIPT</h2>
-            <span className="sub-text">Ref: {selectedPayment?.reference || selectedPayment?._id?.substring(18) || 'REC-2026-001'}</span>
+            <span className="sub-text">Ref: {selectedPayment?.reference || selectedPayment?._id?.substring(18) || '—'}</span>
           </div>
           <span className="rainbow-text logo" style={{fontSize:'1.6rem', fontWeight:'bold'}}>YourBill</span>
         </div>
         
         <div className="receipt-top-content" style={{display:'flex', justifyContent:'space-between', marginBottom:'1.5rem'}}>
           <div className="company-info-receipt">
-            <h4 style={{margin:0}}>YourBill Enterprise Solutions</h4>
-            <p className="sub-text" style={{margin:'0.2rem 0'}}>GSTIN: 27AABCV1234F1Z5</p>
-            <p className="sub-text" style={{margin:0}}>Tech Park, Mumbai, Maharashtra</p>
+            <h4 style={{margin:0}}>{selectedPayment?.businessName || 'Your Business'}</h4>
+            <p className="sub-text" style={{margin:'0.2rem 0'}}>GSTIN: {selectedPayment?.gstin || '—'}</p>
+            <p className="sub-text" style={{margin:0}}>{selectedPayment?.businessAddress || '—'}</p>
           </div>
           <div className="receipt-date-info" style={{textAlign:'right'}}>
-            <p style={{margin:0}}><strong>Date:</strong> {new Date(selectedPayment?.paymentDate || Date.now()).toLocaleDateString()}</p>
-            <p style={{margin:'0.2rem 0'}}><strong>Method:</strong> {selectedPayment?.paymentMethod || 'UPI'}</p>
+            <p style={{margin:0}}><strong>Date:</strong> {selectedPayment?.paymentDate ? new Date(selectedPayment.paymentDate).toLocaleDateString() : '—'}</p>
+            <p style={{margin:'0.2rem 0'}}><strong>Method:</strong> {selectedPayment?.paymentMethod || '—'}</p>
           </div>
         </div>
 
         <div className="receipt-body" style={{marginBottom:'2rem'}}>
           <div className="received-from" style={{background:'var(--bg-color)', padding:'1rem', borderRadius:'8px', marginBottom:'1.5rem'}}>
             <span className="sub-text">Received with thanks from:</span>
-            <h3 style={{margin:'0.3rem 0', fontSize:'1.2rem'}}>{selectedPayment?.customerName || 'Customer Account'}</h3>
+            <h3 style={{margin:'0.3rem 0', fontSize:'1.2rem'}}>{selectedPayment?.customerName || '—'}</h3>
           </div>
           
           <div className="amount-highlight" style={{textAlign:'center', background:'rgba(16, 185, 129, 0.1)', padding:'1.5rem', borderRadius:'10px', border:'1px solid #10b981', marginBottom:'1.5rem'}}>

@@ -1,9 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  AlertTriangle, CheckCircle, Clock, Search, Filter, 
-  Download, Mail, MessageSquare, Phone, Bell, 
-  BarChart2, RefreshCw, AlertCircle, FileText, UploadCloud, Loader2
-} from 'lucide-react';
+import { useState, useEffect, useCallback, useContext } from 'react';
+import { AuthContext } from '../context/AuthContextValue';
+import { AlertTriangle, CheckCircle, Clock, Search, Mail, MessageSquare, Bell, BarChart2, RefreshCw, UploadCloud } from 'lucide-react';
 import { customerApi, invoiceApi, paymentApi } from '../api';
 import './PaymentTracking.css';
 
@@ -11,16 +8,15 @@ export default function PaymentTracking({ onBack }) {
   const [activeView, setActiveView] = useState('dashboard'); // dashboard, reminders, reconciliation
   const [loading, setLoading] = useState(false);
   const [customers, setCustomers] = useState([]);
-  const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [reminderNote, setReminderNote] = useState('');
+  const [bankPreview, setBankPreview] = useState([]);
+  const [csvError, setCsvError] = useState('');
+  const { user } = useContext(AuthContext);
+  const currency = user?.businessSettings?.currency || user?.currency || 'INR';
+  const currencySymbol = currency === 'INR' ? '₹' : currency;
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [custList, invList, payList] = await Promise.all([
@@ -35,7 +31,7 @@ export default function PaymentTracking({ onBack }) {
       const enrichedCustomers = (custList || []).map(cust => {
         const custInvs = (invList || []).filter(i => i.customerName === cust.name);
         const unpaidInvs = custInvs.filter(i => i.paymentStatus !== 'Paid');
-        const totalOutstanding = unpaidInvs.reduce((s, i) => s + (i.balanceAmount || i.grandTotal || 0), 0);
+        const totalOutstanding = unpaidInvs.reduce((s, i) => s + (i.balanceAmount ?? i.grandTotal ?? 0), 0);
         
         let overdueAmount = 0;
         let aging0to30 = 0;
@@ -43,9 +39,9 @@ export default function PaymentTracking({ onBack }) {
         let aging60plus = 0;
 
         unpaidInvs.forEach(i => {
-          const due = i.dueDate ? new Date(i.dueDate) : new Date(i.date);
+          const due = i.dueDate ? new Date(i.dueDate) : (i.date ? new Date(i.date) : now);
           const diffDays = Math.max(0, Math.floor((now - due) / (1000 * 60 * 60 * 24)));
-          const amt = i.balanceAmount || i.grandTotal || 0;
+          const amt = i.balanceAmount ?? i.grandTotal ?? 0;
 
           if (diffDays > 0) overdueAmount += amt;
 
@@ -53,11 +49,6 @@ export default function PaymentTracking({ onBack }) {
           else if (diffDays <= 60) aging31to60 += amt;
           else aging60plus += amt;
         });
-
-        // Credit score estimation
-        let score = 95;
-        if (overdueAmount > 50000) score = 55;
-        else if (overdueAmount > 0) score = 75;
 
         return {
           id: cust._id,
@@ -67,31 +58,78 @@ export default function PaymentTracking({ onBack }) {
           totalOutstanding,
           overdueAmount,
           aging: { '0-30': aging0to30, '31-60': aging31to60, '60+': aging60plus },
-          score,
           risk: overdueAmount > 50000 ? 'High' : overdueAmount > 0 ? 'Medium' : 'Low',
-          lastPayment: custInvs.length > 0 ? new Date(custInvs[0].date).toLocaleDateString() : 'N/A'
         };
       });
 
       setCustomers(enrichedCustomers);
-      setInvoices(invList || []);
       setPayments(payList || []);
     } catch (err) {
       console.error('Failed to load tracking data:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadData, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadData]);
 
   const handleSendReminder = (customer, channel = 'WhatsApp') => {
-    const text = `Hello ${customer.name}, this is a gentle reminder from YourBill regarding pending invoices totaling ₹${customer.totalOutstanding.toLocaleString('en-IN')}. Please settle at your earliest convenience. Thank you!`;
-    if (channel === 'WhatsApp' && customer.phone) {
+    const company = user?.businessName || user?.shopName || user?.name || 'Your business';
+    const text = `Hello ${customer.name}, this is a reminder from ${company} about your pending balance of ${currencySymbol}${customer.totalOutstanding.toLocaleString('en-IN')}. Please contact us to arrange payment. Thank you.`;
+    if (channel === 'WhatsApp') {
+      if (!customer.phone) { window.alert('Is customer ka phone number saved nahi hai.'); return; }
       const cleanPhone = customer.phone.replace(/[^0-9]/g, '');
+      if (cleanPhone.length < 10) { window.alert('Saved phone number valid nahi lag raha. Customer profile update karein.'); return; }
       const url = `https://wa.me/${cleanPhone.length === 10 ? '91' + cleanPhone : cleanPhone}?text=${encodeURIComponent(text)}`;
-      window.open(url, '_blank');
-    } else {
-      alert(`[${channel} Dispatched] Reminder successfully sent to ${customer.name}!\n\nMessage: "${text}"`);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
     }
+    if (!customer.email) { window.alert('Is customer ka email saved nahi hai.'); return; }
+    window.open(`mailto:${encodeURIComponent(customer.email)}?subject=${encodeURIComponent('Payment reminder')}&body=${encodeURIComponent(text)}`, '_self');
+  };
+
+  const handleBankCsv = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setCsvError('');
+    setBankPreview([]);
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) { setCsvError('CSV file 2 MB se chhoti honi chahiye.'); return; }
+    try {
+      const content = await file.text();
+      const rows = content.split(/\r?\n/).filter(Boolean);
+      if (rows.length < 2) throw new Error('CSV mein header aur kam se kam ek transaction row honi chahiye.');
+      const parseRow = (line) => {
+        const cells = []; let cell = ''; let quoted = false;
+        for (let i = 0; i < line.length; i++) {
+          const ch = line[i];
+          if (ch.charCodeAt(0) === 34 && line[i + 1]?.charCodeAt(0) === 34 && quoted) { cell += String.fromCharCode(34); i++; }
+          else if (ch.charCodeAt(0) === 34) quoted = !quoted;
+          else if (ch === ',' && !quoted) { cells.push(cell.trim()); cell = ''; }
+          else cell += ch;
+        }
+        cells.push(cell.trim()); return cells;
+      };
+      const headers = parseRow(rows[0]).map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+      const findColumn = (...keys) => headers.findIndex(h => keys.some(k => h.includes(k)));
+      const refIdx = findColumn('reference', 'transactionid', 'utr', 'txnid', 'description', 'narration');
+      const amountIdx = findColumn('amount', 'credit', 'deposit');
+      const dateIdx = findColumn('date', 'valuedate');
+      if (refIdx < 0 || amountIdx < 0) throw new Error('CSV mein reference/description aur amount/credit columns nahi mile.');
+      const preview = rows.slice(1).map((line, index) => {
+        const cells = parseRow(line); const rawAmount = (cells[amountIdx] || '').replace(/[₹,\s]/g, '');
+        const amount = Number(rawAmount); const reference = cells[refIdx] || '';
+        const match = Number.isFinite(amount) && amount > 0 ? payments.find(pay =>
+          Number(pay.amount) === amount && [pay.reference, pay.invoiceNumber].some(value => value && reference.toLowerCase().includes(String(value).toLowerCase()))
+        ) : null;
+        return { id: index, date: dateIdx >= 0 ? cells[dateIdx] : '', reference, amount, match: match || null };
+      }).filter(row => row.reference || Number.isFinite(row.amount));
+      setBankPreview(preview);
+      if (!preview.length) setCsvError('CSV mein readable transaction rows nahi mile.');
+    } catch (error) { setCsvError(error.message || 'CSV read nahi ho saki.'); }
   };
 
   // Metrics
@@ -110,7 +148,7 @@ export default function PaymentTracking({ onBack }) {
         <div>
           <button className="back-btn" onClick={onBack}>← Back to Dashboard</button>
           <h2 className="track-title">Payment Tracking & Overdue Follow-ups</h2>
-          <p className="track-subtitle">Monitor customer aging ledgers, credit risk scores, and automated collections</p>
+          <p className="track-subtitle">Monitor outstanding invoices, due dates, and customer follow-ups</p>
         </div>
         <div className="header-actions">
           <button className="btn-secondary" onClick={loadData} disabled={loading} style={{display:'flex', alignItems:'center', gap:'0.4rem'}}>
@@ -130,7 +168,7 @@ export default function PaymentTracking({ onBack }) {
           <div className="metric-icon bg-blue"><BarChart2 size={24} /></div>
           <div className="metric-info">
             <h4>Total Outstanding</h4>
-            <div className="metric-value">₹{totalOutstanding.toLocaleString('en-IN')}</div>
+            <div className="metric-value">{currencySymbol}{totalOutstanding.toLocaleString('en-IN')}</div>
             <div className="metric-trend">Across {customers.length} client accounts</div>
           </div>
         </div>
@@ -138,16 +176,16 @@ export default function PaymentTracking({ onBack }) {
           <div className="metric-icon bg-red"><AlertTriangle size={24} /></div>
           <div className="metric-info">
             <h4>Overdue Receivables</h4>
-            <div className="metric-value text-red">₹{totalOverdue.toLocaleString('en-IN')}</div>
+            <div className="metric-value text-red">{currencySymbol}{totalOverdue.toLocaleString('en-IN')}</div>
             <div className="metric-trend negative">{overdueCustomersCount} accounts past due</div>
           </div>
         </div>
         <div className="metric-card">
           <div className="metric-icon bg-orange"><Clock size={24} /></div>
           <div className="metric-info">
-            <h4>Collection Efficiency</h4>
-            <div className="metric-value text-green">94.2%</div>
-            <div className="metric-trend positive">Healthy turnover</div>
+            <h4>Current (not overdue)</h4>
+            <div className="metric-value text-green">{currencySymbol}{Math.max(0, totalOutstanding - totalOverdue).toLocaleString('en-IN')}</div>
+            <div className="metric-trend">Outstanding balance not past due</div>
           </div>
         </div>
         <div className="metric-card">
@@ -155,7 +193,7 @@ export default function PaymentTracking({ onBack }) {
           <div className="metric-info">
             <h4>Settled Payments</h4>
             <div className="metric-value">{payments.length}</div>
-            <div className="metric-trend positive">Reconciled in bank</div>
+            <div className="metric-trend">Payment records in this account</div>
           </div>
         </div>
       </div>
@@ -186,7 +224,7 @@ export default function PaymentTracking({ onBack }) {
                 <th>Total Pending</th>
                 <th>Overdue (Past Due Date)</th>
                 <th>Aging (0-30d | 31-60d | 60d+)</th>
-                <th>Credit Score</th>
+                <th>Overdue Risk</th>
                 <th>Follow-up Actions</th>
               </tr>
             </thead>
@@ -201,19 +239,19 @@ export default function PaymentTracking({ onBack }) {
                       </div>
                     </td>
                     <td>
-                      <strong>₹{cust.totalOutstanding.toLocaleString('en-IN')}</strong>
+                      <strong>{currencySymbol}{cust.totalOutstanding.toLocaleString('en-IN')}</strong>
                     </td>
                     <td>
                       <span className={cust.overdueAmount > 0 ? 'text-red font-bold' : 'text-green'}>
-                        ₹{cust.overdueAmount.toLocaleString('en-IN')}
+                        {currencySymbol}{cust.overdueAmount.toLocaleString('en-IN')}
                       </span>
                     </td>
                     <td>
                       <div className="aging-bar-container">
                         <div className="aging-text" style={{display:'flex', justifyContent:'space-between', fontSize:'0.75rem', marginBottom:'3px'}}>
-                          <span>₹{cust.aging['0-30'].toLocaleString('en-IN')}</span>
-                          <span>₹{cust.aging['31-60'].toLocaleString('en-IN')}</span>
-                          <span>₹{cust.aging['60+'].toLocaleString('en-IN')}</span>
+                          <span>{currencySymbol}{cust.aging['0-30'].toLocaleString('en-IN')}</span>
+                          <span>{currencySymbol}{cust.aging['31-60'].toLocaleString('en-IN')}</span>
+                          <span>{currencySymbol}{cust.aging['60+'].toLocaleString('en-IN')}</span>
                         </div>
                         <div className="aging-bar" style={{height:'6px', display:'flex', borderRadius:'4px', overflow:'hidden', background:'var(--border-color)'}}>
                           <div className="aging-segment bg-green" style={{flex: cust.aging['0-30'] || 0.1}}></div>
@@ -225,7 +263,7 @@ export default function PaymentTracking({ onBack }) {
                     <td>
                       <div className="score-cell">
                         <div className="score-badge">
-                          <span>{cust.score}/100</span>
+                          <span>{cust.risk}</span>
                         </div>
                         <span className={`risk-label ${cust.risk.toLowerCase()}`}>{cust.risk} Risk</span>
                       </div>
@@ -272,11 +310,11 @@ export default function PaymentTracking({ onBack }) {
         <div className="track-header">
           <div>
             <button className="back-btn" onClick={() => setActiveView('dashboard')}>← Back to Tracking</button>
-            <h2 className="track-title">Automated Reminders & Follow-ups</h2>
-            <p className="track-subtitle">Smart communication workflows for accounts past due</p>
+            <h2 className="track-title">Reminder Drafts & Follow-ups</h2>
+            <p className="track-subtitle">Review and open individual message drafts for overdue accounts</p>
           </div>
           <div className="header-actions">
-            <button className="btn-primary rainbow-bg" onClick={() => alert(`Bulk reminders queued for ${overdueList.length} overdue clients via WhatsApp & Email!`)}>
+            <button className="btn-primary rainbow-bg" onClick={() => window.alert('Bulk sending provider configured nahi hai. Har customer par WhatsApp/Email button se draft kholkar review aur send karein.')}>
               <Mail size={18} /> Bulk Dispatch Reminders
             </button>
           </div>
@@ -329,12 +367,12 @@ export default function PaymentTracking({ onBack }) {
                   <div className="reminder-header" style={{display:'flex', justifyContent:'space-between', marginBottom:'1rem'}}>
                     <div className="cust-info">
                       <strong>{cust.name}</strong>
-                      <div className="sub-text">Phone: {cust.phone || 'N/A'} • Total Due: ₹{cust.totalOutstanding.toLocaleString('en-IN')}</div>
+                      <div className="sub-text">Phone: {cust.phone || 'N/A'} • Total Due: {currencySymbol}{cust.totalOutstanding.toLocaleString('en-IN')}</div>
                     </div>
-                    <strong className="text-red" style={{fontSize:'1.2rem'}}>₹{cust.overdueAmount.toLocaleString('en-IN')} Overdue</strong>
+                    <strong className="text-red" style={{fontSize:'1.2rem'}}>{currencySymbol}{cust.overdueAmount.toLocaleString('en-IN')} Overdue</strong>
                   </div>
                   <div className="reminder-body">
-                    <p className="sub-text">Credit Score: {cust.score}/100. Dispatched automated alert channels:</p>
+                    <p className="sub-text">Credit risk estimate: {cust.risk}. Choose a channel to open a message draft for review.</p>
                     <div className="communication-channels" style={{display:'flex', gap:'0.8rem', marginTop:'0.8rem'}}>
                       <button className="btn-secondary" onClick={() => handleSendReminder(cust, 'Email')}>
                         <Mail size={16} /> Send Email Notice
@@ -365,14 +403,14 @@ export default function PaymentTracking({ onBack }) {
         <div>
           <button className="back-btn" onClick={() => setActiveView('dashboard')}>← Back to Dashboard</button>
           <h2 className="track-title">Automated Bank Reconciliation</h2>
-          <p className="track-subtitle">Match bank statements, UPI transactions, and payments with customer invoices</p>
+          <p className="track-subtitle">Preview CSV transactions against saved payments. Suggested matches need your review.</p>
         </div>
         <div className="header-actions">
           <label className="btn-secondary" style={{cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'0.4rem'}}>
             <UploadCloud size={18} /> Upload Bank CSV
-            <input type="file" accept=".csv" style={{display:'none'}} onChange={() => alert('Bank statement parsed: 12 transactions mapped!')}/>
+            <input type="file" accept=".csv,text/csv" style={{display:'none'}} onChange={handleBankCsv}/>
           </label>
-          <button className="btn-primary rainbow-bg" onClick={() => alert('Auto-match engine executed! 100% matched transactions recorded.')}>
+          <button className="btn-primary rainbow-bg" onClick={() => setBankPreview(rows => rows.map(row => ({ ...row, match: payments.find(pay => Number(pay.amount) === row.amount && [pay.reference, pay.invoiceNumber].some(value => value && row.reference.toLowerCase().includes(String(value).toLowerCase()))) || null })))} disabled={!bankPreview.length}>
             <RefreshCw size={18} /> Run Auto-Match
           </button>
         </div>
@@ -388,16 +426,16 @@ export default function PaymentTracking({ onBack }) {
         </div>
         <div className="metric-card">
           <div className="metric-info">
-            <h4>Auto-Matched Rate</h4>
-            <div className="metric-value text-blue">98.5%</div>
-            <div className="metric-trend positive">Instant recognition</div>
+            <h4>Exact Match Rate</h4>
+            <div className="metric-value text-blue">{bankPreview.length ? `${Math.round((bankPreview.filter(row => row.match).length / bankPreview.length) * 100)}%` : '—'}</div>
+            <div className="metric-trend">Exact reference and amount matches in uploaded CSV</div>
           </div>
         </div>
         <div className="metric-card">
           <div className="metric-info">
             <h4>Pending Allocation</h4>
-            <div className="metric-value text-green">0</div>
-            <div className="metric-trend">Clean reconciliation</div>
+            <div className="metric-value text-orange">{bankPreview.filter(row => !row.match).length}</div>
+            <div className="metric-trend">CSV rows without an exact match</div>
           </div>
         </div>
       </div>
@@ -414,15 +452,17 @@ export default function PaymentTracking({ onBack }) {
             </tr>
           </thead>
           <tbody>
-            {payments.slice(0, 8).map((pay, idx) => (
+            {bankPreview.length ? bankPreview.slice(0, 100).map(row => (
+              <tr key={`csv-${row.id}`}><td>{row.date || '—'}</td><td><strong>{row.reference}</strong></td><td>{row.match?.customerName || 'Unmatched'}</td><td><strong>{Number.isFinite(row.amount) ? `${currencySymbol}${row.amount.toLocaleString('en-IN')}` : 'Invalid amount'}</strong></td><td><span className={`status-badge ${row.match ? 'success' : 'danger'}`}>{row.match ? `Review match: ${row.match.invoiceNumber}` : 'Needs review'}</span></td></tr>
+            )) : payments.slice(0, 8).map((pay, idx) => (
               <tr key={pay._id || idx}>
-                <td>{new Date(pay.paymentDate || pay.createdAt || Date.now()).toLocaleDateString()}</td>
+                <td>{pay.paymentDate || pay.createdAt ? new Date(pay.paymentDate || pay.createdAt).toLocaleDateString() : '—'}</td>
                 <td><strong>{pay.reference || `TXN-${pay._id?.substring(18) || idx}`}</strong></td>
                 <td>{pay.customerName || 'Customer'}</td>
-                <td><strong>₹{(pay.amount || 0).toLocaleString('en-IN')}</strong></td>
+                <td><strong>{currencySymbol}{(pay.amount || 0).toLocaleString('en-IN')}</strong></td>
                 <td>
-                  <span className="status-badge success">
-                    <CheckCircle size={12} style={{marginRight:4}}/> Matched (#{pay.invoiceNumber || 'Direct'})
+                  <span className={`status-badge ${pay.status === 'Completed' ? 'success' : 'danger'}`}>
+                    {pay.status || 'Unknown'} · {pay.invoiceNumber || 'Direct payment'}
                   </span>
                 </td>
               </tr>
@@ -430,6 +470,8 @@ export default function PaymentTracking({ onBack }) {
           </tbody>
         </table>
       </div>
+      {csvError && <p role="alert" className="text-red" style={{padding:'0.75rem 1rem'}}>{csvError}</p>}
+      {bankPreview.length > 0 && <p className="sub-text" style={{padding:'0.75rem 1rem'}}>Showing {Math.min(bankPreview.length, 100)} of {bankPreview.length} parsed rows. Matches are suggestions only; no payment or invoice records were changed.</p>}
     </div>
   );
 

@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Box, TrendingUp, AlertTriangle, Package, ShoppingCart, 
-  Users, MapPin, Activity, Calendar, Hash, Truck, ArrowRight, ArrowLeft, Plus, X
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Box, TrendingUp, AlertTriangle, Package, ShoppingCart, Plus, X } from 'lucide-react';
 import './InventoryManagement.css';
+import { inventoryApi, productApi } from '../api';
 
 export default function InventoryManagement({ onBack }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -24,34 +22,25 @@ export default function InventoryManagement({ onBack }) {
 
   const [formData, setFormData] = useState({});
 
-  useEffect(() => {
-    fetchAllData();
-  }, []);
-
-  const fetchAllData = async () => {
+  async function fetchAllData() {
     try {
       setLoading(true);
-      const [prodRes, movRes, purRes, supRes, warRes, batRes] = await Promise.all([
-        fetch('http://localhost:5000/api/products'),
-        fetch('http://localhost:5000/api/inventory/movements'),
-        fetch('http://localhost:5000/api/inventory/purchases'),
-        fetch('http://localhost:5000/api/inventory/suppliers'),
-        fetch('http://localhost:5000/api/inventory/warehouses'),
-        fetch('http://localhost:5000/api/inventory/batches')
+      const [prod, mov, pur, sup, war, bat] = await Promise.all([
+        productApi.getAll(), inventoryApi.getMovements(), inventoryApi.getPurchases(),
+        inventoryApi.getSuppliers(), inventoryApi.getWarehouses(), inventoryApi.getBatches()
       ]);
-      
-      if (prodRes.ok) setProducts(await prodRes.json());
-      if (movRes.ok) setMovements(await movRes.json());
-      if (purRes.ok) setPurchases(await purRes.json());
-      if (supRes.ok) setSuppliers(await supRes.json());
-      if (warRes.ok) setWarehouses(await warRes.json());
-      if (batRes.ok) setBatches(await batRes.json());
+      setProducts(prod); setMovements(mov); setPurchases(pur); setSuppliers(sup); setWarehouses(war); setBatches(bat);
     } catch (error) {
       console.error("Error fetching inventory data:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const timer = window.setTimeout(fetchAllData, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -60,22 +49,11 @@ export default function InventoryManagement({ onBack }) {
   const handleSubmit = async (e, endpoint, stateUpdater, toggleForm) => {
     e.preventDefault();
     try {
-      const response = await fetch(`http://localhost:5000/api/inventory/${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-      if (response.ok) {
-        const newData = await response.json();
-        stateUpdater(prev => [newData, ...prev]);
-        toggleForm(false);
-        setFormData({});
-        alert("Saved successfully!");
-      } else {
-        const errText = await response.text();
-        console.error("Backend Error:", errText);
-        alert(`Failed to save! Please ensure backend is restarted. Server says: ${response.status} ${response.statusText}`);
-      }
+      const newData = await inventoryApi.createItem(endpoint, formData);
+      stateUpdater(prev => [newData, ...prev]);
+      toggleForm(false);
+      setFormData({});
+      alert("Saved successfully!");
     } catch (error) {
       console.error(`Error adding to ${endpoint}:`, error);
       alert(`Network error: ${error.message}. Is the backend running?`);

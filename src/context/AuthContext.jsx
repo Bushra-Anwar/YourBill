@@ -1,6 +1,7 @@
-import React, { createContext, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import { AuthContext } from './AuthContextValue';
+import { authApi } from '../api';
 
-export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -8,26 +9,29 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load user from localStorage directly — no backend needed
-    const savedUser = localStorage.getItem('currentUser');
-    const savedToken = localStorage.getItem('token');
-    if (savedUser && savedToken) {
+    let mounted = true;
+    const restoreAccount = async () => {
+      const savedToken = localStorage.getItem('token');
+      if (!savedToken) { if (mounted) setLoading(false); return; }
       try {
-        setUser(JSON.parse(savedUser));
-        setToken(savedToken);
+        const savedUser = await authApi.getMe();
+        if (mounted) { setUser(savedUser); setToken(savedToken); }
       } catch {
         localStorage.removeItem('currentUser');
         localStorage.removeItem('token');
-      }
-    }
-    setLoading(false);
+        if (mounted) { setUser(null); setToken(null); }
+      } finally { if (mounted) setLoading(false); }
+    };
+    restoreAccount();
+    return () => { mounted = false; };
   }, []);
 
   const login = (userData, jwtToken) => {
-    setUser(userData);
+    const normalizedUser = { ...userData, name: userData.name || [userData.firstName, userData.lastName].filter(Boolean).join(' ') };
+    setUser(normalizedUser);
     setToken(jwtToken);
     localStorage.setItem('token', jwtToken);
-    localStorage.setItem('currentUser', JSON.stringify(userData));
+    localStorage.setItem('currentUser', JSON.stringify(normalizedUser));
   };
 
   const logout = () => {

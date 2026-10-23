@@ -1,45 +1,130 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { LayoutDashboard, UsersRound, FileText, FilePenLine, CreditCard, ShoppingCart, Bell, Files, Package, Warehouse, BookOpen, Landmark, BarChart3, Sparkles, Settings, RefreshCw, ShieldCheck, Rocket, Menu as MenuIcon, X, Search, Crown, House, ReceiptText, Boxes, CircleDollarSign, Moon, Sun, SlidersHorizontal, Users, Building2 } from 'lucide-react';
 import './MainDashboard.css';
 import SubscriptionDemo from './SubscriptionDemo';
 import POSBilling from './POSBilling';
-import { invoiceApi, customerApi, productApi } from '../api';
+import { invoiceApi, customerApi, productApi, adminApi } from '../api';
+import { AuthContext } from '../context/AuthContextValue';
+import ProfileSettings from './ProfileSettings';
+import { hasFeatureAccess } from '../subscriptionAccess';
+
+const dashboardIconMap = {
+  dashboard: LayoutDashboard, CustomerManagement: UsersRound, InvoiceManagement: FileText,
+  QuotationManagement: FilePenLine, PaymentManagement: CreditCard, EcommerceIntegration: ShoppingCart,
+  NotificationsManagement: Bell, DocumentManagement: Files, ProductServiceManagement: Package,
+  InventoryManagement: Warehouse, AccountingManagement: BookOpen, TaxManagement: Landmark,
+  ReportsAnalytics: BarChart3, AIFeatures: Sparkles, AdminPanel: Settings,
+  SubscriptionManagement: RefreshCw, UserManagement: ShieldCheck, AdvancedFeatures: Rocket, AdminShops: Building2
+};
+function DashboardNavIcon({ id }) {
+  const Icon = dashboardIconMap[id] || CircleDollarSign;
+  return <Icon size={18} strokeWidth={1.8} aria-hidden="true" />;
+}
 
 const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
+  const { user, logout } = React.useContext(AuthContext);
+  const roleKey = String(user?.role || user?.userType || 'client').toLowerCase().replace(/[\s_-]/g, '');
+  const isAdminRole = ['admin', 'administrator', 'superadmin', 'owner'].includes(roleKey);
   const [activeMenu, setActiveMenu] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // For mobile hamburger
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
+  const profileMenuRef = useRef(null);
+  const [trialClock, setTrialClock] = useState(0);
   const [billingMode, setBillingMode] = useState('standard'); // 'standard' or 'pos'
 
-  const [stats, setStats] = useState({
-    totalRevenue: 0,
-    totalPaid: 0,
-    totalOutstanding: 0,
-    totalOverdue: 0,
-    totalInvoices: 0,
-    lowStockCount: 0
-  });
   const [customersList, setCustomersList] = useState([]);
   const [productsList, setProductsList] = useState([]);
+  const [invoicesList, setInvoicesList] = useState([]);
+  const [adminRenewalAlerts, setAdminRenewalAlerts] = useState([]);
+  const [showLowStockAlerts, setShowLowStockAlerts] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('yourbill-profile-preferences') || '{}').lowStockAlerts !== false; }
+    catch { return true; }
+  });
 
   useEffect(() => {
-    loadDashboardData();
+    const timer = window.setTimeout(loadDashboardData, 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
-  const loadDashboardData = async () => {
+  useEffect(() => {
+    if (!isAdminRole) return undefined;
+    let mounted = true;
+    const loadRenewals = () => adminApi.getShops().then(shops => {
+      if (mounted) setAdminRenewalAlerts(shops.filter(shop => shop.renewalDueSoon));
+    }).catch(() => { if (mounted) setAdminRenewalAlerts([]); });
+    loadRenewals();
+    const timer = window.setInterval(loadRenewals, 15 * 60 * 1000);
+    return () => { mounted = false; window.clearInterval(timer); };
+  }, [isAdminRole]);
+
+  useEffect(() => {
+    if (!showProfile) return undefined;
+    const closeOutside = event => { if (!profileMenuRef.current?.contains(event.target)) setShowProfile(false); };
+    const closeOnEscape = event => { if (event.key === 'Escape') setShowProfile(false); };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [showProfile]);
+
+  useEffect(() => {
+    if (!user?.trialEndsAt || user.subscriptionStatus !== 'trial') return undefined;
+    const timer = window.setInterval(() => setTrialClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, [user?.trialEndsAt, user?.subscriptionStatus]);
+
+  useEffect(() => {
+    const updatePreferences = () => {
+      try { setShowLowStockAlerts(JSON.parse(localStorage.getItem('yourbill-profile-preferences') || '{}').lowStockAlerts !== false); }
+      catch { setShowLowStockAlerts(true); }
+    };
+    window.addEventListener('yourbill-profile-preferences-changed', updatePreferences);
+    return () => window.removeEventListener('yourbill-profile-preferences-changed', updatePreferences);
+  }, []);
+
+  async function loadDashboardData() {
     try {
-      const [s, c, p] = await Promise.all([
-        invoiceApi.getStats(),
+      const [c, p, invoices] = await Promise.all([
         customerApi.getAll(),
-        productApi.getAll()
+        productApi.getAll(),
+        invoiceApi.getAll()
       ]);
-      if (s) setStats(s);
       if (c) setCustomersList(c);
       if (p) setProductsList(p);
+      if (invoices) setInvoicesList(invoices);
     } catch (err) {
       console.error('Error loading dashboard data:', err);
     }
   };
+
+  const dashboardNotifications = [
+    ...adminRenewalAlerts.map(shop => ({
+      key: `subscription-expiry-${shop._id}`,
+      title: `${shop.companyName} subscription expiring`,
+      detail: `${shop.subscriptionStatus === 'trial' ? 'Trial' : shop.plan} ends ${shop.daysUntilExpiry === 0 ? 'today' : `in ${shop.daysUntilExpiry} day${shop.daysUntilExpiry === 1 ? '' : 's'}`}. ${shop.email}`
+    })),
+    ...(() => {
+      const end = user?.trialEndsAt ? new Date(user.trialEndsAt).getTime() : NaN;
+      const remaining = end - trialClock;
+      if (user?.subscriptionStatus !== 'trial' || !Number.isFinite(end) || remaining <= 0) return [];
+      if (remaining <= 24 * 60 * 60 * 1000) return [{ key: 'trial-24-hour-warning', title: 'Free trial ends in 1 day', detail: `Your ${user.plan || 'Professional'} trial ends ${new Date(end).toLocaleString()}. Choose a plan to keep using your workspace.` }];
+      if (remaining <= 48 * 60 * 60 * 1000) return [{ key: 'trial-48-hour-warning', title: 'Free trial ends in 2 days', detail: `Your ${user.plan || 'Professional'} trial ends ${new Date(end).toLocaleString()}. Review plans before access ends.` }];
+      return [];
+    })(),
+    ...invoicesList.filter(invoice => invoice.status !== 'Paid').map(invoice => ({
+      key: invoice._id,
+      title: 'Payment pending',
+      detail: `${invoice.invoiceNumber || 'Invoice'} · ${invoice.customerName || 'Customer'}`
+    })),
+    ...(showLowStockAlerts ? productsList.filter(product => product.type === 'Physical Product' && Number(product.stock) <= Number(product.minStock ?? 5)).map(product => ({
+      key: product._id,
+      title: 'Low stock',
+      detail: `${product.name} · ${Number(product.stock) || 0} left`
+    })) : [])
+  ];
 
   const menuCategories = [
     {
@@ -70,6 +155,7 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
     },
     {
       section: "3. Admin Capabilities", items: [
+        { id: 'AdminShops', category: "All Shops & Data", icon: "🏬" },
         { id: 'AdminPanel', category: "Platform Settings", icon: "⚙️" },
         { id: 'SubscriptionManagement', category: "Client Subscriptions", icon: "🔄" },
         { id: 'UserManagement', category: "Admin Roles & Access", icon: "🔐" },
@@ -112,8 +198,8 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
     setInvoiceItems([...invoiceItems, { id: newId, name: '', qty: 1, price: 0, tax: 0, total: 0 }]);
   };
 
-  const subtotal = invoiceItems.reduce((sum, item) => sum + ((parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0)), 0);
-  const taxTotal = invoiceItems.reduce((sum, item) => sum + (((parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0) * (parseFloat(item.tax) || 0)) / 100), 0);
+  const subtotal = invoiceItems.filter(item => item.name.trim()).reduce((sum, item) => sum + ((parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0)), 0);
+  const taxTotal = invoiceItems.filter(item => item.name.trim()).reduce((sum, item) => sum + (((parseFloat(item.qty) || 0) * (parseFloat(item.price) || 0) * (parseFloat(item.tax) || 0)) / 100), 0);
 
   const [customerName, setCustomerName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -124,33 +210,66 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
   const discountAmount = parseFloat(discount) || 0;
   const grandTotal = subtotal + taxTotal - discountAmount;
 
+  const startNewInvoice = () => {
+    setBillingMode('standard');
+    setCustomerName('');
+    setPhoneNumber('');
+    setGstin('');
+    setInvoiceItems([{ id: 1, name: '', qty: 1, price: 0, tax: 0, total: 0 }]);
+    setDiscount(0);
+    setNotes('');
+    setActiveMenu('sale-invoice');
+  };
+
   const handleSaveAndPrint = async () => {
-    if (!customerName) {
+    const cleanCustomerName = customerName.trim();
+    if (!cleanCustomerName) {
       alert('Please enter a customer name.');
       return;
     }
-    if (grandTotal <= 0) {
+    const invoiceLines = invoiceItems.filter(item => item.name.trim());
+    if (!invoiceLines.length || invoiceLines.some(item => Number(item.qty) <= 0 || Number(item.price) < 0)) {
       alert('Please add valid items to the invoice.');
       return;
     }
+    if (discountAmount < 0 || discountAmount > subtotal + taxTotal) {
+      alert('Discount must be between ₹0 and the invoice total.');
+      return;
+    }
+    if (grandTotal <= 0) {
+      alert('Invoice total must be greater than ₹0.');
+      return;
+    }
+
+    const matchedCustomer = customersList.find(customer =>
+      String(customer.name || '').trim().toLowerCase() === cleanCustomerName.toLowerCase()
+    );
 
     const payload = {
-      invoiceNumber: `INV-${Date.now()}`,
-      customer: customerName,
+      customerId: matchedCustomer?._id || matchedCustomer?.customerId,
+      customerName: cleanCustomerName,
+      customerPhone: phoneNumber.trim(),
+      customerGstin: gstin.trim(),
       date: new Date(),
       type: 'Sale Invoice',
-      items: invoiceItems.map(item => ({
+      items: invoiceLines.map(item => {
+        const product = productsList.find(entry => String(entry.name || '').trim().toLowerCase() === item.name.trim().toLowerCase());
+        return {
+        productId: product?._id || product?.productId,
         name: item.name,
+        quantity: Number(item.qty),
         qty: parseFloat(item.qty),
         rate: parseFloat(item.price),
         tax: parseFloat(item.tax),
         amount: item.total
-      })),
+      }; }),
       subtotal,
       totalTax: taxTotal,
       discount: discountAmount,
-      amount: grandTotal,
-      status: 'Paid',
+      totalAmount: grandTotal,
+      grandTotal,
+      paidAmount: 0,
+      status: 'Unpaid',
       notes: notes
     };
 
@@ -198,26 +317,26 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
       <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-brand">
           <span className="rainbow-text logo" onClick={() => setActiveTab('Explore')} style={{ cursor: 'pointer' }}>YourBill</span>
-          <button className="close-sidebar-btn" onClick={() => setIsSidebarOpen(false)}>✕</button>
+          <button className="close-sidebar-btn" aria-label="Close navigation" onClick={() => setIsSidebarOpen(false)}><X size={19} /></button>
         </div>
         <div className="sidebar-menu">
-          {menuCategories.map((group, index) => (
+          {menuCategories.filter(group => isAdminRole || group.items.some(item => !['AdminPanel', 'SubscriptionManagement', 'AdminShops'].includes(item.id) && hasFeatureAccess(user, item.id))).map((group, index) => (
             <div key={index} className="menu-section">
-              <div className="menu-section-title">{group.section}</div>
-              {group.items.map((item) => (
+              <div className="menu-section-title">{!isAdminRole && group.section === '3. Admin Capabilities' ? '3. Enterprise Workspace' : group.section}</div>
+              {group.items.filter(item => (isAdminRole || !['AdminPanel', 'SubscriptionManagement', 'AdminShops'].includes(item.id)) && hasFeatureAccess(user, item.id)).map((item) => (
                 <div
                   key={item.id}
                   className={`menu-item ${activeMenu === item.id ? 'active' : ''}`}
                   onClick={() => handleMenuClick(item)}
                 >
-                  <span className="icon">{item.icon}</span> {item.category}
+                  <span className="icon"><DashboardNavIcon id={item.id} /></span> {item.category}
                 </div>
               ))}
             </div>
           ))}
           <div className="menu-section" style={{ marginTop: 'auto', borderTop: '1px solid var(--glass-border)', paddingTop: '1rem' }}>
             <div className="menu-item" onClick={toggleTheme} style={{ display: 'flex', alignItems: 'center' }}>
-              <span className="icon">{theme === 'light' ? '🌙' : '☀️'}</span>
+              <span className="icon">{theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}</span>
               <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
             </div>
           </div>
@@ -230,59 +349,73 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
           <div className="header-left">
             <div className="company-branding">
               <button className="hamburger-btn" onClick={() => setIsSidebarOpen(true)}>
-                ≡
+                <MenuIcon size={21} aria-hidden="true" />
               </button>
-              <span className="logo-icon">🏢</span>
-              <select className="company-select">
-                <option>Nexus Business Profile</option>
-                <option>Secondary Branch</option>
-              </select>
+              <span className="logo-icon"><House size={18} aria-hidden="true" /></span>
+              <span className="company-select" title={user?.companyName || user?.shopName || 'Your Business'}>{user?.companyName || user?.shopName || 'Your Business'}</span>
               <button
                 className="header-btn"
                 onClick={() => setActiveTab('Home')}
                 style={{ marginLeft: '10px', background: 'transparent', border: '1px solid var(--glass-border)', padding: '0.4rem 0.8rem', borderRadius: '8px', cursor: 'pointer', color: 'var(--text-main)', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px' }}
               >
-                🏠 Main Site
+                <House size={15} aria-hidden="true" /> Main Site
               </button>
             </div>
           </div>
           <div className="header-center">
             <div className="search-bar-container">
-              <span className="search-icon">🔍</span>
+              <span className="search-icon"><Search size={16} aria-hidden="true" /></span>
               <input type="text" placeholder="Search Parties, Items, Invoices..." className="universal-search" />
             </div>
           </div>
           <div className="header-right">
-            <button className="upgrade-btn header-btn" onClick={() => setActiveMenu('subscription-demo')} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'linear-gradient(45deg, #FFD700, #FDB931)', color: '#000', padding: '0.5rem 1rem', borderRadius: '8px', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: '0.9rem' }}>
-              👑 Subscription
+            <button className="upgrade-btn header-btn" onClick={() => isAdminRole ? setActiveTab('SubscriptionManagement') : setActiveMenu('subscription-demo')} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: 'linear-gradient(45deg, #FFD700, #FDB931)', color: '#000', padding: '0.5rem 1rem', borderRadius: '8px', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: '0.9rem' }}>
+              <Crown size={16} aria-hidden="true" /> Subscription
             </button>
-            <button className="create-new-btn rainbow-bg" onClick={() => setActiveMenu('sale-invoice')}>
+            <button className="create-new-btn rainbow-bg" onClick={startNewInvoice}>
               + Create New
             </button>
             <div className="header-actions">
               <div className="notification-wrapper">
                 <div className="notification-bell header-btn" onClick={() => setShowNotifications(!showNotifications)}>
-                  🔔 <span className="badge">3</span>
+                  <Bell size={19} aria-hidden="true" /> {dashboardNotifications.length > 0 && <span className="badge">{dashboardNotifications.length}</span>}
                 </div>
                 {showNotifications && (
                   <div className="dropdown-menu fade-in">
                     <div className="dropdown-header">Notifications</div>
-                    <div className="dropdown-item"><strong>System:</strong> New update available</div>
-                    <div className="dropdown-item"><strong>Billing:</strong> Payment received for INV-001</div>
-                    <div className="dropdown-item"><strong>Inventory:</strong> Low stock on 'Wireless Mouse'</div>
+                    {dashboardNotifications.length ? dashboardNotifications.slice(0, 6).map(notification => (
+                      <div className="dropdown-item" key={notification.key} onClick={() => String(notification.key).startsWith('subscription-expiry-') && setActiveTab('AdminShops')}><strong>{notification.title}:</strong> {notification.detail}</div>
+                    )) : <div className="dropdown-item">You’re all caught up.</div>}
                   </div>
                 )}
               </div>
 
-              <div className="profile-wrapper">
-                <div className="profile-avatar" onClick={() => setShowProfile(!showProfile)}>👤</div>
+              <div className="profile-wrapper" ref={profileMenuRef} onMouseLeave={() => setShowProfile(false)}>
+                <button type="button" className="profile-avatar" aria-label="Open profile menu" aria-expanded={showProfile} title={user?.name || user?.email || 'Profile'} onClick={() => setShowProfile(open => !open)}>{(user?.name || user?.email || 'U').slice(0, 1).toUpperCase()}</button>
                 {showProfile && (
-                  <div className="dropdown-menu fade-in" style={{ right: 0 }}>
-                    <div className="dropdown-header">My Profile</div>
-                    <div className="dropdown-item">Settings</div>
-                    <div className="dropdown-item">Billing Plan</div>
+                  <div className="dropdown-menu profile-role-menu fade-in" style={{ right: 0 }}>
+                    <div className="dropdown-header"><strong>{user?.name || user?.email || 'My Profile'}</strong>{user?.email && <small style={{ display: 'block', marginTop: '.25rem', fontWeight: 400 }}>{user.email}</small>}{user?.companyName && <small style={{ display: 'block', marginTop: '.15rem', fontWeight: 400 }}>{user.companyName}</small>}</div>
+                    {isAdminRole ? (
+                      <>
+                        <div className="dropdown-item" onClick={() => { setShowProfile(false); setActiveTab('AdminPanel'); }}><Settings size={15} /> Admin Console</div>
+                        <div className="dropdown-item" onClick={() => { setShowProfile(false); setActiveTab('UserManagement'); }}><Users size={15} /> Team & Access</div>
+                        <div className="dropdown-item" onClick={() => { setShowProfile(false); setActiveTab('SubscriptionManagement'); }}><Crown size={15} /> Client Subscriptions</div>
+                        <div className="dropdown-item" onClick={() => { setShowProfile(false); setActiveTab('AdminShops'); }}><Building2 size={15} /> All Shops & Data</div>
+                        <div className="dropdown-item" onClick={() => { setShowProfile(false); setActiveTab('ReportsAnalytics'); }}><BarChart3 size={15} /> Platform Reports</div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="dropdown-item" onClick={() => { setShowProfile(false); setActiveTab('InvoiceManagement'); }}><ReceiptText size={15} /> My Invoices</div>
+                        <div className="dropdown-item" onClick={() => { setShowProfile(false); setActiveTab('ProductServiceManagement'); }}><Boxes size={15} /> Products & Stock</div>
+                        <div className="dropdown-item" onClick={() => { setShowProfile(false); setActiveTab('ReportsAnalytics'); }}><BarChart3 size={15} /> Business Reports</div>
+                        <div className="dropdown-item" onClick={() => { setShowProfile(false); setActiveMenu('subscription-demo'); }}><Crown size={15} /> My Billing Plan</div>
+                      </>
+                    )}
+                    {user?.subscriptionStatus === 'trial' && user?.trialEndsAt && <div className="dropdown-item" style={{ cursor: 'default' }}><Crown size={15} /> Trial ends {new Date(user.trialEndsAt).toLocaleDateString()}</div>}
                     <div className="dropdown-divider"></div>
-                    <div className="dropdown-item text-red">Log Out</div>
+                    <div className="dropdown-item" onClick={() => { setShowProfile(false); setActiveMenu('profile-settings'); }}><SlidersHorizontal size={15} /> Profile & Settings</div>
+                    <div className="dropdown-divider"></div>
+                    {user && <div className="dropdown-item text-red" onClick={() => { logout(); setActiveTab('Home'); }}>Log Out</div>}
                   </div>
                 )}
               </div>
@@ -292,6 +425,7 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
 
         {/* Dynamic Content */}
         <div className="dynamic-content fade-in">
+          {activeMenu === 'profile-settings' && <ProfileSettings onBack={() => setActiveMenu('dashboard')} theme={theme} toggleTheme={toggleTheme} />}
           {activeMenu === 'dashboard' && (
             <div className="dashboard-content dropship-style">
 
@@ -305,7 +439,7 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
                   Streamline operations, manage inventory, and gain real-time insights into your revenue, sales, and customers in one unified platform.
                 </p>
                 <div className="hero-actions">
-                  <button className="btn-primary rainbow-bg pulse-btn" onClick={() => setActiveMenu('sale-invoice')}>Start Billing</button>
+                  <button className="btn-primary rainbow-bg pulse-btn" onClick={startNewInvoice}>Start Billing</button>
                   <button className="btn-secondary glass-btn" onClick={() => setActiveTab('ReportsAnalytics')}>View Reports</button>
                 </div>
               </div>
@@ -338,7 +472,7 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
                   </div>
                 </div>
 
-                <div className="floating-card pos-5 featured-float" onClick={() => setActiveMenu('sale-invoice')}>
+                <div className="floating-card pos-5 featured-float" onClick={startNewInvoice}>
                   <div className="fc-icon theme-icon">🧾</div>
                   <div className="fc-info">
                     <strong>Billing / POS</strong>
@@ -378,7 +512,7 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
                   </div>
                 </div>
 
-                <div className="floating-card pos-10" onClick={() => setActiveTab('AdminPanel')}>
+                <div className="floating-card pos-10" onClick={() => isAdminRole ? setActiveTab('AdminPanel') : setActiveMenu('profile-settings')}>
                   <div className="fc-icon theme-icon">⚙️</div>
                   <div className="fc-info">
                     <strong>Settings</strong>
@@ -419,7 +553,7 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
                       </div>
                     </div>
 
-                    <div className="w-node-3d" onClick={() => setActiveMenu('sale-invoice')}>
+                    <div className="w-node-3d" onClick={startNewInvoice}>
                       <div className="node-platform-3d"></div>
                       <div className="node-content-3d">
                         <div className="node-number-badge">3</div>
@@ -440,7 +574,7 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
                   </div>
                 </div>
 
-                <button className="workflow-explore-btn pulse-btn rainbow-bg" onClick={() => setActiveTab('AdminPanel')}>EXPLORE THE MENU.</button>
+                <button className="workflow-explore-btn pulse-btn rainbow-bg" onClick={() => isAdminRole ? setActiveTab('AdminPanel') : setActiveTab('ReportsAnalytics')}>EXPLORE THE MENU.</button>
               </div>
 
             </div>
@@ -545,7 +679,7 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
                                 if (found) {
                                   let taxNum = 18;
                                   if (found.taxRate) {
-                                    const parsed = parseFloat(found.taxRate.replace(/[^0-9.]/g, ''));
+                                    const parsed = parseFloat(String(found.taxRate).replace(/[^0-9.]/g, ''));
                                     if (!isNaN(parsed)) taxNum = parsed;
                                   }
                                   handleItemChange(item.id, 'price', found.price || 0);
@@ -647,7 +781,7 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
           )}
 
           {activeMenu === 'subscription-demo' && (
-            <SubscriptionDemo onBack={() => setActiveMenu('dashboard')} />
+            <SubscriptionDemo onBack={() => setActiveMenu('dashboard')} onLogin={() => setActiveTab('Login')} onRegister={() => setActiveTab('Registration')} />
           )}
 
           {(activeMenu !== 'dashboard' && activeMenu !== 'sale-invoice' && activeMenu !== 'subscription-demo') && (
@@ -662,23 +796,23 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
       {/* Mobile Bottom Navigation */}
       <div className="mobile-bottom-nav mobile-only">
         <div className={`nav-item ${activeMenu === 'dashboard' ? 'active' : ''}`} onClick={() => setActiveMenu('dashboard')}>
-          <span className="icon">📊</span>
+          <span className="icon"><LayoutDashboard size={18} /></span>
           <span>Home</span>
         </div>
         <div className={`nav-item ${activeMenu === 'parties' ? 'active' : ''}`} onClick={() => setActiveMenu('parties')}>
-          <span className="icon">👥</span>
+          <span className="icon"><UsersRound size={18} /></span>
           <span>Parties</span>
         </div>
-        <div className="nav-item action-btn" onClick={() => setActiveMenu('sale-invoice')}>
+        <div className="nav-item action-btn" onClick={startNewInvoice}>
           <div className="floating-btn rainbow-bg">+</div>
           <span>Sale</span>
         </div>
         <div className={`nav-item ${activeMenu === 'items' ? 'active' : ''}`} onClick={() => setActiveMenu('items')}>
-          <span className="icon">📦</span>
+          <span className="icon"><Package size={18} /></span>
           <span>Items</span>
         </div>
         <div className={`nav-item ${activeMenu === 'settings' ? 'active' : ''}`} onClick={() => setIsSidebarOpen(true)}>
-          <span className="icon">≡</span>
+          <span className="icon"><MenuIcon size={18} /></span>
           <span>Menu</span>
         </div>
       </div>

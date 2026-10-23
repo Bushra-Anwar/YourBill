@@ -1,140 +1,47 @@
-import React, { useState } from 'react';
-import { 
-  Bell, Mail, MessageSquare, Smartphone, Send, Clock, 
-  Settings, CheckCircle, XCircle, AlertTriangle, FileText,
-  MessageCircle, BarChart2, Edit, Trash2, Zap, ArrowRight, Check
-} from 'lucide-react';
+import { useState } from 'react';
+import { Mail, MessageSquare, Send, Clock, AlertTriangle, FileText, MessageCircle, Edit, Trash2, Plus } from 'lucide-react';
 import './NotificationsManagement.css';
 
 export default function NotificationsManagement({ onBack }) {
   const [activeTab, setActiveTab] = useState('dashboard'); // dashboard, compose, templates, automation, logs
+  const [channel, setChannel] = useState('Email');
+  const [recipient, setRecipient] = useState('');
+  const [subject, setSubject] = useState('');
+  const [message, setMessage] = useState('');
+
+  const openDraft = () => {
+    if (!recipient.trim() || !message.trim()) { window.alert('Recipient aur message dono fill karein.'); return; }
+    if (channel === 'Email') {
+      window.open(`mailto:${encodeURIComponent(recipient.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`, '_self');
+      return;
+    }
+    if (channel === 'WhatsApp') {
+      const phone = recipient.replace(/\D/g, '');
+      if (phone.length < 10) { window.alert('Valid phone number daalein.'); return; }
+      window.open(`https://wa.me/${phone.length === 10 ? `91${phone}` : phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    window.alert('SMS provider configured nahi hai. Email ya WhatsApp draft use karein.');
+  };
 
   const renderDashboard = () => (
     <div className="nm-view fade-in">
-      <div className="nm-header">
-        <div>
-          <button className="back-btn" onClick={onBack}>← Back to Home</button>
-          <h2 className="nm-title">Notifications & Communication</h2>
-          <p className="nm-subtitle">Multi-channel automated alerts, invoices, and payment reminders</p>
-        </div>
-        <div style={{display:'flex', gap:'1rem'}}>
-          <button className="btn-secondary"><Clock size={16}/> Scheduled</button>
-          <button className="btn-primary rainbow-bg" onClick={() => setActiveTab('compose')}><Send size={16} /> Send Broadcast</button>
-        </div>
-      </div>
-
+      <div className="nm-header"><div><button className="back-btn" onClick={onBack}>← Back to Home</button><h2 className="nm-title">Notifications</h2><p className="nm-subtitle">Delivery totals appear here after a messaging service is connected.</p></div></div>
       <div className="grid-4">
-        <div className="metric-card">
-          <div className="metric-icon bg-blue"><Mail size={24}/></div>
-          <div className="metric-info">
-            <h4>Emails Sent</h4>
-            <div className="metric-value">1,240</div>
-            <div className="metric-trend positive">98% Delivery Rate</div>
-          </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-icon bg-green"><MessageCircle size={24}/></div>
-          <div className="metric-info">
-            <h4>WhatsApp Msgs</h4>
-            <div className="metric-value">850</div>
-            <div className="metric-trend positive">92% Read Rate</div>
-          </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-icon bg-orange"><MessageSquare size={24}/></div>
-          <div className="metric-info">
-            <h4>SMS Delivered</h4>
-            <div className="metric-value">420</div>
-            <div className="metric-trend">99% Delivery Rate</div>
-          </div>
-        </div>
-        <div className="metric-card" style={{borderLeft: '4px solid #ef4444'}}>
-          <div className="metric-icon" style={{background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444'}}><AlertTriangle size={24}/></div>
-          <div className="metric-info">
-            <h4>Failed Notifications</h4>
-            <div className="metric-value text-orange">12</div>
-            <div className="metric-trend negative">Requires attention</div>
-          </div>
-        </div>
+        <div className="metric-card"><div className="metric-icon bg-blue"><Mail size={24}/></div><div className="metric-info"><h4>Emails sent</h4><div className="metric-value">—</div><div className="metric-trend">No delivery log connected</div></div></div>
+        <div className="metric-card"><div className="metric-icon bg-green"><MessageCircle size={24}/></div><div className="metric-info"><h4>WhatsApp messages</h4><div className="metric-value">—</div><div className="metric-trend">No delivery log connected</div></div></div>
+        <div className="metric-card"><div className="metric-icon bg-orange"><MessageSquare size={24}/></div><div className="metric-info"><h4>SMS delivered</h4><div className="metric-value">—</div><div className="metric-trend">No delivery log connected</div></div></div>
+        <div className="metric-card"><div className="metric-icon"><AlertTriangle size={24}/></div><div className="metric-info"><h4>Failed notifications</h4><div className="metric-value">—</div><div className="metric-trend">No delivery log connected</div></div></div>
       </div>
-
-      <div className="grid-2">
-        <div className="nm-section">
-          <h3>Recent Activity Logs</h3>
-          <table className="nm-table" style={{marginTop:'1rem'}}>
-            <thead>
-              <tr>
-                <th>Recipient</th>
-                <th>Channel</th>
-                <th>Type</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>ABC Traders</strong><br/><span className="sub-text">client@abc.com</span></td>
-                <td><span className="channel-pill email"><Mail size={12}/> Email</span></td>
-                <td>Invoice Sent</td>
-                <td><span className="status-badge opened">Opened</span></td>
-              </tr>
-              <tr>
-                <td><strong>XYZ Pvt Ltd</strong><br/><span className="sub-text">+91 9876543210</span></td>
-                <td><span className="channel-pill whatsapp"><MessageCircle size={12}/> WhatsApp</span></td>
-                <td>Payment Reminder</td>
-                <td><span className="status-badge delivered">Delivered</span></td>
-              </tr>
-              <tr>
-                <td><strong>Rahul Sharma</strong><br/><span className="sub-text">In-App</span></td>
-                <td><span className="channel-pill push"><Bell size={12}/> System</span></td>
-                <td>Low Stock Alert</td>
-                <td><span className="status-badge sent">Sent</span></td>
-              </tr>
-            </tbody>
-          </table>
-          <button className="btn-secondary" style={{width:'100%', marginTop:'1rem'}} onClick={() => setActiveTab('logs')}>View All Logs</button>
-        </div>
-
-        <div className="nm-section">
-          <h3>Active Automation Rules</h3>
-          <div style={{marginTop:'1.5rem'}}>
-            <div className="automation-rule">
-              <div className="automation-trigger">Payment Received</div>
-              <div className="automation-arrow">→</div>
-              <div style={{display:'flex', gap:'0.5rem'}}>
-                <div className="automation-action email"><Mail size={16}/> Send Receipt</div>
-                <div className="automation-action whatsapp"><MessageCircle size={16}/> Notify on WA</div>
-              </div>
-            </div>
-            
-            <div className="automation-rule">
-              <div className="automation-trigger">Invoice Created</div>
-              <div className="automation-arrow">→</div>
-              <div style={{display:'flex', gap:'0.5rem'}}>
-                <div className="automation-action email"><Mail size={16}/> Send PDF</div>
-              </div>
-            </div>
-
-            <div className="automation-rule">
-              <div className="automation-trigger">3 Days Before Due</div>
-              <div className="automation-arrow">→</div>
-              <div style={{display:'flex', gap:'0.5rem'}}>
-                <div className="automation-action sms"><MessageSquare size={16}/> SMS Reminder</div>
-                <div className="automation-action whatsapp"><MessageCircle size={16}/> WA Alert</div>
-              </div>
-            </div>
-          </div>
-          <button className="btn-secondary" style={{width:'100%', marginTop:'0.5rem'}} onClick={() => setActiveTab('automation')}>Manage Rules</button>
-        </div>
-      </div>
+      <div className="grid-2"><div className="nm-section"><h3>Recent activity</h3><p className="sub-text">No notification activity has been recorded.</p></div><div className="nm-section"><h3>Automation rules</h3><p className="sub-text">No automation rules are configured.</p></div></div>
     </div>
   );
-
   const renderCompose = () => (
     <div className="nm-view fade-in">
        <div className="nm-header">
         <div>
           <h2 className="nm-title">Compose Message</h2>
-          <p className="nm-subtitle">Send manual or bulk notifications to customers</p>
+          <p className="nm-subtitle">Open a reviewed email or WhatsApp draft. Delivery providers are not connected, so messages are never marked as sent here.</p>
         </div>
       </div>
 
@@ -145,15 +52,15 @@ export default function NotificationsManagement({ onBack }) {
             <div className="form-group">
               <label>Select Channel *</label>
               <div style={{display:'flex', gap:'1rem', marginTop:'0.5rem'}}>
-                <label style={{display:'flex', alignItems:'center', gap:'0.5rem'}}><input type="radio" name="channel" defaultChecked/> Email</label>
-                <label style={{display:'flex', alignItems:'center', gap:'0.5rem'}}><input type="radio" name="channel"/> WhatsApp</label>
-                <label style={{display:'flex', alignItems:'center', gap:'0.5rem'}}><input type="radio" name="channel"/> SMS</label>
+                <label style={{display:'flex', alignItems:'center', gap:'0.5rem'}}><input type="radio" name="channel" checked={channel === 'Email'} onChange={() => setChannel('Email')}/> Email</label>
+                <label style={{display:'flex', alignItems:'center', gap:'0.5rem'}}><input type="radio" name="channel" checked={channel === 'WhatsApp'} onChange={() => setChannel('WhatsApp')}/> WhatsApp</label>
+                <label style={{display:'flex', alignItems:'center', gap:'0.5rem'}}><input type="radio" name="channel" checked={channel === 'SMS'} onChange={() => setChannel('SMS')}/> SMS</label>
               </div>
             </div>
             
             <div className="form-group">
               <label>Recipient(s) *</label>
-              <input type="text" placeholder="Select customer(s) or enter email/phone..." />
+              <input type="text" value={recipient} onChange={event => setRecipient(event.target.value)} placeholder={channel === 'Email' ? 'Customer email address' : 'Customer phone number'} />
             </div>
 
             <div className="form-group">
@@ -168,12 +75,12 @@ export default function NotificationsManagement({ onBack }) {
 
             <div className="form-group">
               <label>Subject</label>
-              <input type="text" placeholder="e.g. Important Update regarding your account" />
+              <input type="text" value={subject} onChange={event => setSubject(event.target.value)} placeholder="e.g. Payment reminder" />
             </div>
 
             <div className="form-group">
               <label>Message Body *</label>
-              <textarea placeholder="Type your message here... You can use variables like {{customer_name}}"></textarea>
+              <textarea value={message} onChange={event => setMessage(event.target.value)} placeholder="Write your message. It will open as a draft for you to review."></textarea>
             </div>
             
             <div className="form-group">
@@ -208,8 +115,8 @@ export default function NotificationsManagement({ onBack }) {
           </div>
 
           <div style={{marginTop:'2rem', display:'flex', gap:'1rem'}}>
-            <button className="btn-secondary" style={{flex:1}}><Clock size={16}/> Schedule Later</button>
-            <button className="btn-primary rainbow-bg" style={{flex:2}}><Send size={16}/> Send Now</button>
+            <button className="btn-secondary" style={{flex:1}} disabled title="Scheduling service is not configured"><Clock size={16}/> Scheduling unavailable</button>
+            <button className="btn-primary rainbow-bg" style={{flex:2}} onClick={openDraft}><Send size={16}/> Open {channel} Draft</button>
           </div>
         </div>
       </div>
@@ -221,9 +128,9 @@ export default function NotificationsManagement({ onBack }) {
        <div className="nm-header">
         <div>
           <h2 className="nm-title">Notification Templates</h2>
-          <p className="nm-subtitle">Manage dynamic templates for automated and manual messages</p>
+          <p className="nm-subtitle">Example message templates. Editing and saved template delivery are not configured yet</p>
         </div>
-        <button className="btn-primary rainbow-bg"><Plus size={16}/> Create Template</button>
+        <button className="btn-primary rainbow-bg" disabled title="Template storage is not configured"><Plus size={16}/> Templates are examples</button>
       </div>
 
       <div style={{display:'flex', gap:'1rem', marginBottom:'1rem'}}>
@@ -302,168 +209,11 @@ Balance: ₹<span className="variable-tag">{'{balance_amount}'}</span>
   );
 
   const renderAutomation = () => (
-    <div className="nm-view fade-in">
-       <div className="nm-header">
-        <div>
-          <h2 className="nm-title">Automation & Workflows</h2>
-          <p className="nm-subtitle">Set up triggers to automatically send notifications</p>
-        </div>
-        <button className="btn-primary rainbow-bg"><Zap size={16}/> Create Rule</button>
-      </div>
-
-      <div className="nm-section">
-        <table className="nm-table">
-          <thead>
-            <tr>
-              <th>Trigger Event</th>
-              <th>Conditions</th>
-              <th>Actions (Channels)</th>
-              <th>Status</th>
-              <th>Manage</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>Invoice Created</strong></td>
-              <td><span className="sub-text">Status = Finalized</span></td>
-              <td>
-                <div style={{display:'flex', gap:'0.5rem'}}>
-                  <span className="channel-pill email"><Mail size={12}/> Email</span>
-                  <span className="channel-pill whatsapp"><MessageCircle size={12}/> WA</span>
-                </div>
-              </td>
-              <td><div className="toggle-switch on"></div></td>
-              <td><button className="btn-secondary" style={{padding:'0.3rem 0.5rem'}}>Edit</button></td>
-            </tr>
-            <tr>
-              <td><strong>Payment Received</strong></td>
-              <td><span className="sub-text">Amount &gt; 0</span></td>
-              <td>
-                <div style={{display:'flex', gap:'0.5rem'}}>
-                  <span className="channel-pill email"><Mail size={12}/> Email</span>
-                  <span className="channel-pill sms"><MessageSquare size={12}/> SMS</span>
-                </div>
-              </td>
-              <td><div className="toggle-switch on"></div></td>
-              <td><button className="btn-secondary" style={{padding:'0.3rem 0.5rem'}}>Edit</button></td>
-            </tr>
-            <tr>
-              <td><strong>Due Invoice Alert</strong></td>
-              <td><span className="sub-text">3 Days Before Due</span></td>
-              <td>
-                <div style={{display:'flex', gap:'0.5rem'}}>
-                  <span className="channel-pill whatsapp"><MessageCircle size={12}/> WA</span>
-                  <span className="channel-pill sms"><MessageSquare size={12}/> SMS</span>
-                </div>
-              </td>
-              <td><div className="toggle-switch on"></div></td>
-              <td><button className="btn-secondary" style={{padding:'0.3rem 0.5rem'}}>Edit</button></td>
-            </tr>
-            <tr>
-              <td><strong>Overdue Alert</strong></td>
-              <td><span className="sub-text">1 Day After Due</span></td>
-              <td>
-                <div style={{display:'flex', gap:'0.5rem'}}>
-                  <span className="channel-pill email"><Mail size={12}/> Email</span>
-                  <span className="channel-pill push"><Bell size={12}/> In-App (Sales Rep)</span>
-                </div>
-              </td>
-              <td><div className="toggle-switch on"></div></td>
-              <td><button className="btn-secondary" style={{padding:'0.3rem 0.5rem'}}>Edit</button></td>
-            </tr>
-            <tr>
-              <td><strong>Low Stock Alert</strong></td>
-              <td><span className="sub-text">Stock &lt; Min Level</span></td>
-              <td>
-                <div style={{display:'flex', gap:'0.5rem'}}>
-                  <span className="channel-pill push"><Bell size={12}/> In-App (Manager)</span>
-                </div>
-              </td>
-              <td><div className="toggle-switch on"></div></td>
-              <td><button className="btn-secondary" style={{padding:'0.3rem 0.5rem'}}>Edit</button></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <div className="nm-view fade-in"><div className="nm-header"><div><h2 className="nm-title">Automation & Workflows</h2><p className="nm-subtitle">Configured notification rules will appear here.</p></div></div><div className="nm-section"><p className="sub-text">No automation rules have been saved.</p></div></div>
   );
-
   const renderLogs = () => (
-    <div className="nm-view fade-in">
-       <div className="nm-header">
-        <div>
-          <h2 className="nm-title">Notification Logs</h2>
-          <p className="nm-subtitle">Track delivery status, open rates, and failures</p>
-        </div>
-      </div>
-      
-      <div className="nm-section">
-        <div style={{display:'flex', gap:'1rem', marginBottom:'1.5rem'}}>
-          <input type="text" placeholder="Search logs by recipient or reference..." style={{flex:1, padding:'0.8rem', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-color)', color:'var(--text-primary)'}} />
-          <select style={{padding:'0.8rem', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-color)', color:'var(--text-primary)'}}>
-            <option>All Channels</option>
-            <option>Email</option>
-            <option>WhatsApp</option>
-            <option>SMS</option>
-          </select>
-          <select style={{padding:'0.8rem', borderRadius:'8px', border:'1px solid var(--border-color)', background:'var(--bg-color)', color:'var(--text-primary)'}}>
-            <option>All Statuses</option>
-            <option>Delivered</option>
-            <option>Opened</option>
-            <option>Failed</option>
-          </select>
-        </div>
-
-        <table className="nm-table">
-          <thead>
-            <tr>
-              <th>Timestamp</th>
-              <th>Recipient</th>
-              <th>Channel</th>
-              <th>Message Type / Ref</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>Jan 03, 10:45 AM</td>
-              <td><strong>ABC Traders</strong><br/><span className="sub-text">client@abc.com</span></td>
-              <td><span className="channel-pill email"><Mail size={12}/> Email</span></td>
-              <td>Invoice Sent<br/><span className="sub-text">INV-2026-001</span></td>
-              <td><span className="status-badge opened">Opened</span><br/><span className="sub-text" style={{fontSize:'0.75rem'}}>Jan 03, 11:02 AM</span></td>
-              <td><button className="btn-secondary" style={{padding:'0.2rem 0.5rem'}}>View</button></td>
-            </tr>
-            <tr>
-              <td>Jan 03, 10:45 AM</td>
-              <td><strong>ABC Traders</strong><br/><span className="sub-text">+91 9876543210</span></td>
-              <td><span className="channel-pill whatsapp"><MessageCircle size={12}/> WhatsApp</span></td>
-              <td>Invoice Sent<br/><span className="sub-text">INV-2026-001</span></td>
-              <td><span className="status-badge delivered">Delivered</span><br/><span className="sub-text" style={{fontSize:'0.75rem'}}>Jan 03, 10:46 AM</span></td>
-              <td><button className="btn-secondary" style={{padding:'0.2rem 0.5rem'}}>View</button></td>
-            </tr>
-            <tr>
-              <td>Jan 02, 09:00 AM</td>
-              <td><strong>XYZ Pvt Ltd</strong><br/><span className="sub-text">+91 9998887776</span></td>
-              <td><span className="channel-pill sms"><MessageSquare size={12}/> SMS</span></td>
-              <td>Payment Reminder<br/><span className="sub-text">INV-2025-142</span></td>
-              <td><span className="status-badge failed">Failed</span><br/><span className="sub-text" style={{fontSize:'0.75rem'}}>Invalid Number</span></td>
-              <td><button className="btn-secondary" style={{padding:'0.2rem 0.5rem'}}>Retry</button></td>
-            </tr>
-            <tr>
-              <td>Jan 02, 08:30 AM</td>
-              <td><strong>Acme Corp</strong><br/><span className="sub-text">acme@corp.com</span></td>
-              <td><span className="channel-pill email"><Mail size={12}/> Email</span></td>
-              <td>Payment Receipt<br/><span className="sub-text">PAY-881</span></td>
-              <td><span className="status-badge sent">Sent</span><br/><span className="sub-text" style={{fontSize:'0.75rem'}}>Awaiting Read</span></td>
-              <td><button className="btn-secondary" style={{padding:'0.2rem 0.5rem'}}>View</button></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
+    <div className="nm-view fade-in"><div className="nm-header"><div><h2 className="nm-title">Notification Logs</h2><p className="nm-subtitle">Message delivery history will appear when a provider is connected.</p></div></div><div className="nm-section"><p className="sub-text">No delivery records found.</p></div></div>
   );
-
   return (
     <div className="notifications-management-wrapper">
       {activeTab === 'dashboard' && (

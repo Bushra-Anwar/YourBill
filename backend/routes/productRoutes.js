@@ -56,9 +56,11 @@ router.put('/:id', protect, async (req, res) => {
     }
 
     const payload = { ...req.body };
+    delete payload.shopId; delete payload._id; delete payload.createdAt; delete payload.updatedAt;
     if(status) payload.status = status;
 
-    const updatedProduct = await Product.findOneAndUpdate({ _id: req.params.id, shopId: req.shopId }, payload, { new: true });
+    const updatedProduct = await Product.findOneAndUpdate({ _id: req.params.id, shopId: req.shopId }, payload, { new: true, runValidators: true });
+    if (!updatedProduct) return res.status(404).json({ message: 'Product not found.' });
     res.json(updatedProduct);
   } catch (error) {
     res.status(400).json({ message: error.message });

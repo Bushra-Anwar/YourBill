@@ -7,6 +7,8 @@ const generateId = () => {
   return Date.now().toString(36).toUpperCase() + Math.random().toString(36).substr(2, 5).toUpperCase();
 };
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? 'http://localhost:5000/api' : '/api');
+
 const DB = {
   get: (key) => {
     try { return JSON.parse(localStorage.getItem(key) || '[]'); }
@@ -104,12 +106,16 @@ export const invoiceApi = {
     const invoices = DB.get('invoices');
     const total = invoices.reduce((s, i) => s + (i.totalAmount || 0), 0);
     const paid = invoices.filter(i => i.status === 'Paid').reduce((s, i) => s + (i.totalAmount || 0), 0);
-    const unpaid = invoices.filter(i => i.status === 'Unpaid').reduce((s, i) => s + (i.totalAmount || 0), 0);
+    const outstanding = invoices.reduce((s, i) => s + Math.max(0, (i.totalAmount || i.grandTotal || 0) - (i.paidAmount || 0)), 0);
+    const overdue = invoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + Math.max(0, (i.totalAmount || i.grandTotal || 0) - (i.paidAmount || 0)), 0);
     return {
       totalInvoices: invoices.length,
       totalRevenue: total,
+      totalPaid: paid,
+      totalOutstanding: outstanding,
+      totalOverdue: overdue,
       paidAmount: paid,
-      unpaidAmount: unpaid,
+      unpaidAmount: outstanding,
       overdueCount: invoices.filter(i => i.status === 'Overdue').length
     };
   },
@@ -134,11 +140,28 @@ export const invoiceApi = {
   create: async (data) => {
     const invoices = DB.get('invoices');
     const invNum = 'INV-' + new Date().getFullYear() + '-' + String(invoices.length + 1).padStart(4, '0');
+    const totalAmount = Number(data.totalAmount ?? data.grandTotal ?? data.amount ?? data.total ?? 0);
+    const totalTax = Number(data.totalTax ?? data.taxAmount ?? 0);
+    const items = (data.items || []).map(item => ({
+      ...item,
+      quantity: Number(item.quantity ?? item.qty ?? 1),
+      qty: Number(item.qty ?? item.quantity ?? 1),
+      rate: Number(item.rate ?? item.price ?? 0),
+      amount: Number(item.amount ?? item.total ?? 0)
+    }));
+    const isPaid = data.status === 'Paid' || data.paymentStatus === 'Paid';
     const newInvoice = {
       ...data,
+      customerId: data.customerId || data.clientId || null,
+      customerName: data.customerName || data.customer || '',
+      items,
+      totalTax,
+      totalAmount,
+      grandTotal: Number(data.grandTotal ?? totalAmount),
+      paidAmount: Number(data.paidAmount ?? (isPaid ? totalAmount : 0)),
       _id: generateId(),
       invoiceNumber: invNum,
-      status: data.status || 'Unpaid',
+      status: data.status || data.paymentStatus || 'Unpaid',
       payments: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -151,7 +174,7 @@ export const invoiceApi = {
       const customers = DB.get('customers');
       const cidx = customers.findIndex(c => c._id === data.customerId);
       if (cidx !== -1) {
-        customers[cidx].totalSpent = (customers[cidx].totalSpent || 0) + (data.totalAmount || 0);
+        customers[cidx].totalSpent = (customers[cidx].totalSpent || 0) + totalAmount;
         customers[cidx].invoicesCount = (customers[cidx].invoicesCount || 0) + 1;
         DB.set('customers', customers);
       }
@@ -163,7 +186,7 @@ export const invoiceApi = {
         if (item.productId) {
           const pidx = products.findIndex(p => p._id === item.productId);
           if (pidx !== -1 && products[pidx].type === 'Physical Product') {
-            products[pidx].stock = Math.max(0, (products[pidx].stock || 0) - (item.quantity || 1));
+            products[pidx].stock = Math.max(0, (Number(products[pidx].stock) || 0) - item.quantity);
           }
         }
       });
@@ -276,12 +299,8 @@ export const paymentApi = {
   record: async (data) => {
     return invoiceApi.recordPayment(data.invoiceId, data);
   },
-  createOrder: async (data) => {
-    return { orderId: 'ORD-' + generateId(), amount: data.amount };
-  },
-  verify: async (data) => {
-    return { success: true };
-  }
+  createOrder: async () => { throw new Error('Payment checkout is not configured.'); },
+  verify: async () => ({ success: false, message: 'Payment verification is not configured.' })
 };
 
 // ============================================================
@@ -338,58 +357,93 @@ export const taxApi = {
 };
 
 // ============================================================
-// AUTH API (localStorage-based)
+// AUTH API (MongoDB-backed accounts)
 // ============================================================
+const AUTH_API_BASE = API_BASE;
+const requestAuth = async (path, options = {}) => {
+  const response = await fetch(`${AUTH_API_BASE}/auth${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message || 'Could not connect to your account. Please try again.');
+  return data;
+};
+const normalizeShop = shop => ({
+  ...shop,
+  _id: shop._id || shop.id,
+  name: shop.name || [shop.firstName, shop.lastName].filter(Boolean).join(' '),
+  role: shop.role || 'Client'
+});
 export const authApi = {
-  login: async (data) => {
-    const users = DB.get('users');
-    // Default admin if no users exist
-    if (users.length === 0) {
-      const defaultUser = { _id: 'admin1', name: 'Admin', email: 'admin@billing.com', role: 'Admin', shopName: 'My Business' };
-      DB.set('users', [{ ...defaultUser, password: 'admin123' }]);
-      if (data.email === 'admin@billing.com' && data.password === 'admin123') {
-        const token = 'local-token-' + generateId();
-        localStorage.setItem('token', token);
-        localStorage.setItem('currentUser', JSON.stringify(defaultUser));
-        return { token, user: defaultUser };
-      }
-    }
-    const user = users.find(u => u.email === data.email && u.password === data.password);
-    if (!user) throw new Error('Invalid email or password');
-    const token = 'local-token-' + generateId();
-    localStorage.setItem('token', token);
-    const { password, ...safeUser } = user;
-    localStorage.setItem('currentUser', JSON.stringify(safeUser));
-    return { token, user: safeUser };
+  login: async ({ email, password }) => {
+    const data = await requestAuth('/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+    return { token: data.token, user: normalizeShop(data.shop) };
   },
-  register: async (data) => {
-    const users = DB.get('users');
-    if (users.find(u => u.email === data.email)) throw new Error('Email already registered');
-    const newUser = {
-      ...data,
-      _id: generateId(),
-      role: users.length === 0 ? 'Admin' : 'Staff',
-      createdAt: new Date().toISOString()
-    };
-    users.push(newUser);
-    DB.set('users', users);
-    const token = 'local-token-' + generateId();
-    localStorage.setItem('token', token);
-    const { password, ...safeUser } = newUser;
-    localStorage.setItem('currentUser', JSON.stringify(safeUser));
-    return { token, user: safeUser };
+  register: async ({ name, ...data }) => {
+    const [firstName, ...lastParts] = (name || '').trim().split(/\s+/);
+    const result = await requestAuth('/register', {
+      method: 'POST',
+      body: JSON.stringify({ ...data, firstName, lastName: lastParts.join(' ') })
+    });
+    return { token: result.token, user: normalizeShop(result.shop) };
   },
-  getMe: async () => {
-    const user = localStorage.getItem('currentUser');
-    if (!user) throw new Error('Not authenticated');
-    return JSON.parse(user);
-  },
-  updateProfile: async (data) => {
-    const current = JSON.parse(localStorage.getItem('currentUser') || '{}');
-    const updated = { ...current, ...data };
+  startTrial: async () => {
+    const updated = normalizeShop(await requestAuth('/trial', { method: 'POST' }));
     localStorage.setItem('currentUser', JSON.stringify(updated));
     return updated;
+  },
+  updateSubscription: async (subscription) => {
+    const current = JSON.parse(localStorage.getItem('currentUser') || 'null');
+    if (!current) throw new Error('Log in to update your subscription.');
+    const updated = { ...current, ...subscription };
+    const users = DB.get('users');
+    const index = users.findIndex(item => item._id === current._id || item.email === current.email);
+    if (index >= 0) users[index] = { ...users[index], ...subscription };
+    DB.set('users', users);
+    localStorage.setItem('currentUser', JSON.stringify(updated));
+    return updated;
+  },
+  getMe: async () => {
+    const token = localStorage.getItem('token');
+    if (!token || token.startsWith('local-token-')) throw new Error('Sign in again to refresh your account.');
+    const user = normalizeShop(await requestAuth('/me', { headers: { Authorization: `Bearer ${token}` } }));
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    return user;
+  },
+  updateProfile: async (data) => {
+    const [firstName, ...lastParts] = (data.name || '').trim().split(/\s+/);
+    const changes = { firstName, lastName: lastParts.join(' '), companyName: data.companyName, phone: data.phone };
+    const updated = normalizeShop(await requestAuth('/profile', { method: 'PUT', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify(changes) }));
+    localStorage.setItem('currentUser', JSON.stringify(updated));
+    return updated;
+  },
+  changePassword: async (currentPassword, newPassword) => {
+    return requestAuth('/password', { method: 'PUT', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ currentPassword, newPassword }) });
   }
+};
+
+const requestAdmin = async (path) => {
+  const response = await fetch(`${AUTH_API_BASE}${path}`, {
+    headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message || 'Could not load administrator data.');
+  return data;
+};
+
+export const adminApi = {
+  getShops: () => requestAdmin('/admin/shops'),
+  getShopData: shopId => requestAdmin(`/admin/shops/${encodeURIComponent(shopId)}/data`),
+  addBranch: (shopId, branch) => fetch(`${AUTH_API_BASE}/admin/shops/${encodeURIComponent(shopId)}/branches`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
+    body: JSON.stringify(branch)
+  }).then(async response => {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || 'Could not add branch.');
+    return data;
+  })
 };
 
 // ============================================================
@@ -419,10 +473,8 @@ export const inventoryApi = {
 // AI API (mock responses)
 // ============================================================
 export const aiApi = {
-  parseInvoice: async (prompt) => {
-    return { message: 'AI parsing available in cloud version.', items: [] };
-  },
-  copilotChat: async (query) => {
+  parseInvoice: async () => { throw new Error('AI invoice parsing is unavailable until the API is configured.'); },
+  copilotChat: async () => {
     const invoices = DB.get('invoices');
     const customers = DB.get('customers');
     const products = DB.get('products');
@@ -434,6 +486,94 @@ export const aiApi = {
     return { forecast: [] };
   }
 };
+
+const requestBusinessData = async (path, options = {}) => {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${localStorage.getItem('token') || ''}`,
+      ...(options.headers || {})
+    }
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message || data.error || 'Could not save or load business data.');
+  return data;
+};
+
+const jsonOptions = (method, body) => ({ method, body: JSON.stringify(body) });
+const normalizeInvoice = invoice => ({ ...invoice, status: invoice.status || invoice.paymentStatus, totalAmount: invoice.totalAmount ?? invoice.grandTotal ?? invoice.amount ?? 0 });
+const normalizeQuotation = quote => ({ ...quote, quotationNumber: quote.quotationNumber || quote.quoteNumber, customerName: quote.customerName || quote.customer || '', totalAmount: quote.totalAmount ?? quote.amount ?? 0 });
+
+// Persist tenant records in MongoDB so every login sees its own data and admins can review it.
+Object.assign(productApi, {
+  getAll: () => requestBusinessData('/products'),
+  create: data => requestBusinessData('/products', jsonOptions('POST', data)),
+  update: (id, data) => requestBusinessData(`/products/${encodeURIComponent(id)}`, jsonOptions('PUT', data)),
+  delete: id => requestBusinessData(`/products/${encodeURIComponent(id)}`, { method: 'DELETE' })
+});
+Object.assign(customerApi, {
+  getAll: () => requestBusinessData('/customers'),
+  create: data => requestBusinessData('/customers', jsonOptions('POST', data)),
+  update: (id, data) => requestBusinessData(`/customers/${encodeURIComponent(id)}`, jsonOptions('PUT', data)),
+  delete: id => requestBusinessData(`/customers/${encodeURIComponent(id)}`, { method: 'DELETE' })
+});
+Object.assign(invoiceApi, {
+  getStats: () => requestBusinessData('/invoices/stats/summary'),
+  getAll: async (params = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value).map(([key, value]) => [key, String(value)]));
+    const rows = await requestBusinessData(`/invoices${query.size ? `?${query}` : ''}`);
+    return rows.map(normalizeInvoice);
+  },
+  getById: async id => normalizeInvoice(await requestBusinessData(`/invoices/${encodeURIComponent(id)}`)),
+  create: async data => normalizeInvoice(await requestBusinessData('/invoices', jsonOptions('POST', data))),
+  update: async (id, data) => normalizeInvoice(await requestBusinessData(`/invoices/${encodeURIComponent(id)}`, jsonOptions('PUT', data))),
+  recordPayment: async (id, data) => {
+    const result = await requestBusinessData(`/invoices/${encodeURIComponent(id)}/payments`, jsonOptions('POST', data));
+    return normalizeInvoice(result.invoice);
+  },
+  delete: id => requestBusinessData(`/invoices/${encodeURIComponent(id)}`, { method: 'DELETE' })
+});
+Object.assign(quotationApi, {
+  getAll: async () => (await requestBusinessData('/quotations')).map(normalizeQuotation),
+  create: async data => normalizeQuotation(await requestBusinessData('/quotations', jsonOptions('POST', {
+    ...data,
+    customer: data.customer || data.customerName,
+    amount: data.amount ?? data.totalAmount,
+    totalTax: data.totalTax ?? data.taxAmount
+  }))),
+  updateStatus: async (id, status) => normalizeQuotation(await requestBusinessData(`/quotations/${encodeURIComponent(id)}/status`, jsonOptions('PATCH', { status }))),
+  convertToInvoice: async id => {
+    const result = await requestBusinessData(`/quotations/${encodeURIComponent(id)}/convert-to-invoice`, jsonOptions('POST', {}));
+    return normalizeInvoice(result.invoice);
+  },
+  delete: id => requestBusinessData(`/quotations/${encodeURIComponent(id)}`, { method: 'DELETE' })
+});
+Object.assign(paymentApi, {
+  getAll: async () => (await requestBusinessData('/payment')).map(payment => ({ ...payment, date: payment.date || payment.paymentDate })),
+  record: data => requestBusinessData('/payment/record', jsonOptions('POST', data))
+});
+Object.assign(accountingApi, {
+  getFinancialOverview: () => requestBusinessData('/accounting/financial-overview'),
+  getExpenses: () => requestBusinessData('/accounting/expenses'),
+  createExpense: data => requestBusinessData('/accounting/expenses', jsonOptions('POST', data)),
+  deleteExpense: id => requestBusinessData(`/accounting/expenses/${encodeURIComponent(id)}`, { method: 'DELETE' })
+});
+Object.assign(taxApi, { getSummary: () => requestBusinessData('/tax/summary') });
+Object.assign(inventoryApi, {
+  getSuppliers: () => requestBusinessData('/inventory/suppliers'),
+  getWarehouses: () => requestBusinessData('/inventory/warehouses'),
+  getMovements: () => requestBusinessData('/inventory/movements'),
+  getBatches: () => requestBusinessData('/inventory/batches'),
+  getPurchases: () => requestBusinessData('/inventory/purchases'),
+  createItem: (type, data) => requestBusinessData(`/inventory/${encodeURIComponent(type)}`, jsonOptions('POST', data)),
+  deleteItem: (type, id) => requestBusinessData(`/inventory/${encodeURIComponent(type)}/${encodeURIComponent(id)}`, { method: 'DELETE' })
+});
+Object.assign(aiApi, {
+  parseInvoice: async (prompt, saveToDb = false) => requestBusinessData('/ai/parse-invoice', jsonOptions('POST', { prompt, saveToDb })),
+  copilotChat: query => requestBusinessData('/ai/copilot-chat', jsonOptions('POST', { query })),
+  getForecast: () => requestBusinessData('/ai/forecast')
+});
 
 export default {
   invoice: invoiceApi,

@@ -13,46 +13,24 @@ router.post('/parse-invoice', protect, async (req, res) => {
     const { prompt, saveToDb = false } = req.body;
     if (!prompt) return res.status(400).json({ message: 'Prompt is required' });
 
-    // Extract customer: "for <Customer Name>" or "to <Customer Name>" or "Bill <Customer Name>"
-    let customerName = 'ABC Enterprises';
-    const custMatch = prompt.match(/(?:for|to|bill)\s+([A-Za-z0-9\s&]+?)(?:\.|\,|\s+(?:product|item|qty|quantity|\d+)|$)/i);
-    if (custMatch && custMatch[1].trim()) {
-      customerName = custMatch[1].trim();
-    }
-
-    // Extract quantity
-    let qty = 1;
-    const qtyMatch = prompt.match(/(?:qty|quantity|x|\b)(\d+)\s*(?:pcs|units|items|laptops|chairs|monitors)?/i);
-    if (qtyMatch) {
-      qty = parseInt(qtyMatch[1], 10) || 1;
-    }
-
-    // Extract price
-    let price = 1000;
-    const priceMatch = prompt.match(/(?:price|rate|at|@|rs\.?|inr|₹)\s*:?\s*([\d,]+)/i);
-    if (priceMatch) {
-      price = parseFloat(priceMatch[1].replace(/,/g, '')) || 1000;
-    }
-
-    // Extract tax rate
-    let taxRate = 18;
-    const taxMatch = prompt.match(/(\d+)%\s*(?:gst|tax)/i);
-    if (taxMatch) {
-      taxRate = parseFloat(taxMatch[1]) || 18;
-    }
-
-    // Extract product name
-    let productName = 'Standard Item';
-    const prodMatch = prompt.match(/(?:product|item):\s*([A-Za-z0-9\s]+?)(?:\.|\,|$|\s+(?:qty|quantity|price))/i);
-    if (prodMatch && prodMatch[1].trim()) {
-      productName = prodMatch[1].trim();
-    } else {
-      if (prompt.toLowerCase().includes('laptop')) productName = 'Business Laptop';
-      else if (prompt.toLowerCase().includes('chair')) productName = 'Ergonomic Chair';
-      else if (prompt.toLowerCase().includes('mouse')) productName = 'Wireless Mouse';
-      else if (prompt.toLowerCase().includes('monitor')) productName = '4K UHD Monitor';
-      else if (prompt.toLowerCase().includes('printer')) productName = 'Thermal Printer';
-    }
+    // Only create a draft from values the user actually supplied. Never invent customer, item, price, quantity, or tax.
+    const custMatch = prompt.match(/(?:for|to|bill)\s+([A-Za-z0-9\s&]+?)(?:\.|,|\s+(?:product|item|qty|quantity|\d+)|$)/i);
+    const qtyMatch = prompt.match(/(?:qty|quantity|x)\s*[:=]?\s*(\d+)/i);
+    const priceMatch = prompt.match(/(?:price|rate|at|@|rs\.?|inr|₹)\s*:?\s*([\d,]+(?:\.\d{1,2})?)/i);
+    const taxMatch = prompt.match(/(\d+(?:\.\d+)?)%\s*(?:gst|tax)/i);
+    const prodMatch = prompt.match(/(?:product|item)\s*:\s*([A-Za-z0-9\s&-]+?)(?:\.|,|$|\s+(?:qty|quantity|price|rate))/i);
+    const customerName = custMatch?.[1]?.trim();
+    const productName = prodMatch?.[1]?.trim();
+    const qty = qtyMatch ? Number(qtyMatch[1]) : null;
+    const price = priceMatch ? Number(priceMatch[1].replace(/,/g, '')) : null;
+    const taxRate = taxMatch ? Number(taxMatch[1]) : 0;
+    const missing = [];
+    if (!customerName) missing.push('customer using “for <name>”');
+    if (!productName) missing.push('item using “item: <name>”');
+    if (!Number.isFinite(qty) || qty <= 0) missing.push('quantity using “qty: <number>”');
+    if (!Number.isFinite(price) || price <= 0) missing.push('price using “price: <amount>”');
+    if (missing.length) return res.status(422).json({ message: `Please provide ${missing.join(', ')}. No invoice data was invented.` });
+    if (taxRate < 0 || taxRate > 100) return res.status(422).json({ message: 'Tax must be between 0% and 100%.' });
 
     const subtotal = qty * price;
     const totalTax = (subtotal * taxRate) / 100;
@@ -128,7 +106,8 @@ router.post('/copilot-chat', protect, async (req, res) => {
 
     const totalRevenue = invoices.reduce((s, i) => s + (i.grandTotal || 0), 0);
     const totalOutstanding = invoices.reduce((s, i) => s + (i.balanceAmount || 0), 0);
-    const overdueInvoices = invoices.filter(i => i.paymentStatus === 'Overdue');
+    const now = new Date();
+    const overdueInvoices = invoices.filter(i => i.paymentStatus !== 'Paid' && i.dueDate && new Date(i.dueDate) < now);
     const lowStockProducts = products.filter(p => p.type === 'Physical Product' && p.stock <= p.minStock);
 
     let reply = '';
@@ -158,16 +137,16 @@ router.post('/copilot-chat', protect, async (req, res) => {
       const inputTaxCredit = expenses.reduce((s, e) => s + (e.taxAmount || 0), 0);
       const netTax = Math.max(0, outputTax - inputTaxCredit);
 
-      reply = `🏛️ **GST & Tax Compliance Summary:**\n\n• **Output Tax Collected (Sales):** ₹${outputTax.toLocaleString('en-IN')}\n• **Input Tax Credit (Expenses/ITC):** ₹${inputTaxCredit.toLocaleString('en-IN')}\n• **Net GST Payable for current period:** ₹${netTax.toLocaleString('en-IN')}\n\nGSTR-1 and GSTR-3B summaries are synchronized and ready for filing.`;
+      reply = `🏛️ **GST & Tax Compliance Summary:**\n\n• **Output Tax Collected (Sales):** ₹${outputTax.toLocaleString('en-IN')}\n• **Input Tax Credit (Expenses/ITC):** ₹${inputTaxCredit.toLocaleString('en-IN')}\n• **Net GST Payable for current period:** ₹${netTax.toLocaleString('en-IN')}\n\nThis summary is calculated from saved invoices and expenses; verify it against your accounting records before filing.`;
     } else if (q.includes('overdue') || q.includes('unpaid') || q.includes('receivable')) {
       if (overdueInvoices.length === 0) {
         reply = `🎉 Great news! There are currently no overdue invoices. Outstanding receivables across all unpaid invoices total **₹${totalOutstanding.toLocaleString('en-IN')}**.`;
       } else {
         const list = overdueInvoices.map(i => `• Invoice **#${i.invoiceNumber}** (${i.customerName}) - Due: ₹${(i.balanceAmount || i.grandTotal).toLocaleString('en-IN')}`).join('\n');
-        reply = `⏰ **Overdue Accounts Alert:** You have ${overdueInvoices.length} overdue invoices totaling ₹${overdueInvoices.reduce((s, i) => s + (i.balanceAmount || i.grandTotal), 0).toLocaleString('en-IN')}:\n\n${list}\n\nAutomated WhatsApp & Email payment reminders are ready to be dispatched.`;
+        reply = `⏰ **Overdue Accounts Alert:** You have ${overdueInvoices.length} overdue invoices totaling ₹${overdueInvoices.reduce((s, i) => s + (i.balanceAmount || i.grandTotal), 0).toLocaleString('en-IN')}:\n\n${list}\n\nOpen an individual customer record to review and send a reminder draft.`;
       }
     } else {
-      reply = `🤖 **Copilot Analysis:** Your business has generated **₹${totalRevenue.toLocaleString('en-IN')}** in total sales with **₹${totalOutstanding.toLocaleString('en-IN')}** pending in receivables. There are ${lowStockProducts.length} low-stock alerts and ${overdueInvoices.length} overdue payments. Let me know if you would like me to draft an invoice, trigger reminders, or generate tax filings!`;
+      reply = `🤖 **Copilot Analysis:** Your business has generated **₹${totalRevenue.toLocaleString('en-IN')}** in total sales with **₹${totalOutstanding.toLocaleString('en-IN')}** pending in receivables. There are ${lowStockProducts.length} low-stock alerts and ${overdueInvoices.length} overdue payments. Let me know if you would like me to draft an invoice, review payment drafts, or inspect saved tax totals!`;
     }
 
     res.json({ reply });
@@ -180,18 +159,34 @@ router.post('/copilot-chat', protect, async (req, res) => {
 router.get('/forecast', protect, async (req, res) => {
   try {
     const invoices = await Invoice.find({ shopId: req.shopId });
-    const totalRev = invoices.reduce((s, i) => s + (i.grandTotal || 0), 0);
-    const predictedGrowth = 17.5;
-    const nextMonthForecast = Math.round(totalRev * 1.175);
-    const expectedCollections = Math.round(invoices.reduce((s, i) => s + (i.balanceAmount || 0), 0) * 0.82);
+    const now = new Date();
+    const monthTotals = Array.from({ length: 6 }, (_, offset) => {
+      const month = new Date(now.getFullYear(), now.getMonth() - (5 - offset), 1);
+      const total = invoices.filter(invoice => {
+        const date = new Date(invoice.date || invoice.createdAt);
+        return date.getFullYear() === month.getFullYear() && date.getMonth() === month.getMonth();
+      }).reduce((sum, invoice) => sum + Number(invoice.grandTotal || 0), 0);
+      return total;
+    });
+    const observed = monthTotals.filter(total => total > 0);
+    const revenueForecast = observed.length ? Math.round(observed.reduce((sum, total) => sum + total, 0) / observed.length) : null;
+    const prior = monthTotals.slice(0, 3).filter(total => total > 0);
+    const recent = monthTotals.slice(3).filter(total => total > 0);
+    const priorAverage = prior.length ? prior.reduce((sum, total) => sum + total, 0) / prior.length : null;
+    const recentAverage = recent.length ? recent.reduce((sum, total) => sum + total, 0) / recent.length : null;
+    const growthPercent = priorAverage && recentAverage !== null ? Math.round(((recentAverage - priorAverage) / priorAverage) * 1000) / 10 : null;
+    const outstanding = invoices.reduce((sum, invoice) => sum + Number(invoice.balanceAmount ?? 0), 0);
+    const overdue = invoices.filter(invoice => invoice.paymentStatus !== 'Paid' && invoice.dueDate && new Date(invoice.dueDate) < now)
+      .reduce((sum, invoice) => sum + Number(invoice.balanceAmount ?? invoice.grandTotal ?? 0), 0);
 
     res.json({
-      revenueForecast: nextMonthForecast,
-      growthPercent: predictedGrowth,
-      cashFlowStatus: 'Healthy',
-      expectedCollections,
-      fraudAlertsCount: 0,
-      autoCategorizedRate: 96
+      revenueForecast,
+      growthPercent,
+      forecastMethod: 'Average billed revenue across available months in the last six months; directional estimate, not an AI prediction.',
+      cashFlowStatus: outstanding === 0 ? 'No outstanding invoices' : overdue > 0 ? 'Overdue balances exist' : 'Outstanding invoices not yet overdue',
+      expectedCollections: null,
+      fraudAlertsCount: null,
+      autoCategorizedRate: null
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

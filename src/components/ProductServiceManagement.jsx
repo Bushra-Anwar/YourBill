@@ -1,9 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Package, Tags, Barcode, Layers, Box, Settings, DollarSign, 
-  Upload, Download, Search, Filter, MoreVertical, Edit, Trash2, 
-  ImageIcon, CheckCircle, AlertCircle, TrendingUp, Plus, X, Save
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Package, Barcode, Layers, Box, DollarSign, Search, Edit, Trash2, ImageIcon, AlertCircle, TrendingUp, Plus, X, Save } from 'lucide-react';
 import './ProductServiceManagement.css';
 import { productApi } from '../api';
 
@@ -29,7 +25,7 @@ export default function ProductServiceManagement({ onBack }) {
     fetchProducts();
   }, []);
 
-  const fetchProducts = async () => {
+  async function fetchProducts() {
     try {
       setLoading(true);
       const data = await productApi.getAll();

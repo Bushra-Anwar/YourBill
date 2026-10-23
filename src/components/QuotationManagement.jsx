@@ -1,53 +1,6 @@
 import React, { useState } from 'react';
-import { 
-  FileText, Plus, Search, Filter, Download, MoreVertical, 
-  Printer, Mail, Copy, Trash2, Edit, CheckCircle, Clock, AlertCircle,
-  RefreshCw, Send, CheckSquare, XCircle, FilePlus
-} from 'lucide-react';
+import { FileText, Plus, Search, Filter, MoreVertical, Copy, Trash2, CheckCircle, Clock, AlertCircle, RefreshCw, Send, CheckSquare, FilePlus } from 'lucide-react';
 import './QuotationManagement.css';
-
-const MOCK_QUOTES = [
-  {
-    id: 'QT-2026-001',
-    customer: 'Acme Corp',
-    date: '2026-02-10',
-    expiryDate: '2026-03-10',
-    amount: 155000,
-    status: 'Accepted',
-    version: 'V2',
-    approver: 'Admin'
-  },
-  {
-    id: 'QT-2026-002',
-    customer: 'Global Tech',
-    date: '2026-02-15',
-    expiryDate: '2026-03-15',
-    amount: 450000,
-    status: 'Pending Approval',
-    version: 'V1',
-    approver: 'Manager'
-  },
-  {
-    id: 'QT-2026-003',
-    customer: 'Sarah Jenkins',
-    date: '2026-01-20',
-    expiryDate: '2026-02-20',
-    amount: 8500,
-    status: 'Expired',
-    version: 'V1',
-    approver: 'Auto'
-  },
-  {
-    id: 'QT-2026-004',
-    customer: 'TechVision Ltd',
-    date: '2026-02-28',
-    expiryDate: '2026-03-28',
-    amount: 72000,
-    status: 'Converted',
-    version: 'V3',
-    approver: 'Auto'
-  }
-];
 
 import './QuotationManagement.css';
 import { quotationApi } from '../api';
@@ -61,7 +14,7 @@ export default function QuotationManagement({ onBack }) {
     fetchQuotes();
   }, []);
 
-  const fetchQuotes = async () => {
+  async function fetchQuotes() {
     try {
       setLoading(true);
       const data = await quotationApi.getAll();
@@ -94,10 +47,10 @@ export default function QuotationManagement({ onBack }) {
 
   // Real world functional state for creating quotes
   const [newQuote, setNewQuote] = useState({
-    id: `QT-${Date.now()}`,
-    customer: 'Acme Corp',
-    salesperson: 'John Doe',
-    date: new Date().toISOString().split('T')[0],
+    id: '',
+    customer: '',
+    salesperson: '',
+    date: '',
     expiryDate: '',
     items: [{ id: 1, name: '', description: '', qty: 1, rate: 0, discount: 0, amount: 0 }],
     notes: '',
@@ -145,10 +98,22 @@ export default function QuotationManagement({ onBack }) {
     const discount = parseFloat(item.discount) || 0;
     return sum + (((qty * rate) * discount) / 100);
   }, 0);
-  const totalTax = (subtotal - itemDiscounts) * 0.18; // 18% flat tax for dummy
+  const totalTax = (subtotal - itemDiscounts) * 0.18;
   const grandTotal = subtotal - itemDiscounts + totalTax;
+  const quoteValue = quotes.reduce((sum, quote) => sum + (Number(quote.amount ?? quote.grandTotal) || 0), 0);
+  const pendingQuotes = quotes.filter(quote => /pending|approval/i.test(quote.status || '')).length;
+  const convertedQuotes = quotes.filter(quote => /converted/i.test(quote.status || '')).length;
+  const expiredQuotes = quotes.filter(quote => quote.expiryDate && new Date(quote.expiryDate) < new Date()).length;
 
   const handleSaveQuote = async () => {
+    if (!newQuote.customer.trim()) {
+      alert("Please enter a customer before saving the quotation.");
+      return;
+    }
+    if (!newQuote.items.some(item => item.name.trim() && Number(item.qty) > 0 && Number(item.rate) > 0)) {
+      alert("Add at least one item with a name, quantity, and rate greater than zero.");
+      return;
+    }
     if (grandTotal === 0) {
       alert("Please add items to the quotation before saving.");
       return;
@@ -183,10 +148,10 @@ export default function QuotationManagement({ onBack }) {
       setActiveView('dashboard');
       // Reset form
       setNewQuote({
-        id: `QT-${Date.now()}`,
+        id: '',
         customer: '',
         salesperson: '',
-        date: new Date().toISOString().split('T')[0],
+        date: '',
         expiryDate: '',
         items: [{ id: 1, name: '', description: '', qty: 1, rate: 0, discount: 0, amount: 0 }],
         notes: '',
@@ -237,32 +202,32 @@ export default function QuotationManagement({ onBack }) {
           <div className="metric-icon bg-blue"><FileText size={24} /></div>
           <div className="metric-info">
             <h4>Total Quotes Value</h4>
-            <div className="metric-value">₹1.2M</div>
-            <div className="metric-trend positive">45 active quotes</div>
+            <div className="metric-value">₹{quoteValue.toLocaleString('en-IN')}</div>
+            <div className="metric-trend">{quotes.length} saved quotes</div>
           </div>
         </div>
         <div className="metric-card">
           <div className="metric-icon bg-orange"><Clock size={24} /></div>
           <div className="metric-info">
             <h4>Pending Approval</h4>
-            <div className="metric-value text-orange">8</div>
-            <div className="metric-trend">Needs manager action</div>
+            <div className="metric-value text-orange">{pendingQuotes}</div>
+            <div className="metric-trend">Pending approval</div>
           </div>
         </div>
         <div className="metric-card">
           <div className="metric-icon bg-green"><CheckSquare size={24} /></div>
           <div className="metric-info">
             <h4>Conversion Rate</h4>
-            <div className="metric-value">68%</div>
-            <div className="metric-trend positive">+5% vs last month</div>
+            <div className="metric-value">{quotes.length ? Math.round((convertedQuotes / quotes.length) * 100) : 0}%</div>
+            <div className="metric-trend">Based on saved quotes</div>
           </div>
         </div>
         <div className="metric-card">
           <div className="metric-icon bg-red"><AlertCircle size={24} /></div>
           <div className="metric-info">
             <h4>Expiring Soon</h4>
-            <div className="metric-value text-red">3</div>
-            <div className="metric-trend negative">Expires in 7 days</div>
+            <div className="metric-value text-red">{expiredQuotes}</div>
+            <div className="metric-trend">Past expiry date</div>
           </div>
         </div>
       </div>
@@ -297,7 +262,11 @@ export default function QuotationManagement({ onBack }) {
               </tr>
             </thead>
             <tbody>
-              {quotes.map(quote => (
+              {loading ? (
+                <tr><td colSpan="6" className="empty-state">Loading quotations…</td></tr>
+              ) : quotes.length === 0 ? (
+                <tr><td colSpan="6" className="empty-state">No quotations yet. Create a quote to see it here.</td></tr>
+              ) : quotes.map(quote => (
                 <tr key={quote.id} className="clickable-row" onClick={() => { setSelectedQuote(quote); setActiveView('view'); }}>
                   <td>
                     <div className="quote-cell">
@@ -481,9 +450,9 @@ export default function QuotationManagement({ onBack }) {
         <div>
           <button className="back-btn" onClick={() => setActiveView('dashboard')}>← Back to Quotes</button>
           <div style={{display:'flex', alignItems:'center', gap:'1rem'}}>
-            <h2 className="quote-title">{selectedQuote?.id || 'QT-2026-001'}</h2>
-            <span className={`status-badge ${selectedQuote?.status?.toLowerCase().replace(' ', '-') || 'accepted'}`}>{selectedQuote?.status || 'Accepted'}</span>
-            <span className="version-badge">{selectedQuote?.version || 'V2'}</span>
+            <h2 className="quote-title">{selectedQuote?.id || 'Quotation'}</h2>
+            <span className={`status-badge ${selectedQuote?.status?.toLowerCase().replace(' ', '-') || 'draft'}`}>{selectedQuote?.status || 'Draft'}</span>
+            {selectedQuote?.version && <span className="version-badge">{selectedQuote.version}</span>}
           </div>
         </div>
         <div className="header-actions">

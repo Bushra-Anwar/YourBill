@@ -1,12 +1,11 @@
-import React, { useState, useEffect } from 'react';
-import {
-  FileText, Plus, Search, Filter, Download, MoreVertical,
-  Printer, Mail, Copy, Trash2, Edit, CheckCircle, Clock, AlertCircle, Share2, DollarSign
-} from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { FileText, Plus, Search, Filter, Printer, Trash2, CheckCircle, Clock, AlertCircle, Share2, DollarSign } from 'lucide-react';
 import './InvoiceManagement.css';
 import { invoiceApi, customerApi, productApi } from '../api';
+import { AuthContext } from '../context/AuthContextValue';
 
 export default function InvoiceManagement({ onBack }) {
+  const { user } = React.useContext(AuthContext);
   const [activeView, setActiveView] = useState('dashboard'); // dashboard, create, view
   const [invoices, setInvoices] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -32,30 +31,25 @@ export default function InvoiceManagement({ onBack }) {
 
   // Form State for creating new invoice
   const [newInvoice, setNewInvoice] = useState({
-    id: `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`,
+    id: '',
     customer: '',
     customerPhone: '',
     customerGstin: '',
-    date: new Date().toISOString().split('T')[0],
-    dueDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+    date: '',
+    dueDate: '',
     type: 'Tax Invoice',
     items: [
-      { id: 1, productId: '', name: '', description: '', hsnCode: '998311', qty: 1, rate: 0, tax: 18, amount: 0 }
+      { id: 1, productId: '', name: '', description: '', hsnCode: '', qty: 1, rate: 0, tax: 0, amount: 0 }
     ],
     discount: 0,
     discountType: '%',
-    paymentStatus: 'Paid',
+    paymentStatus: 'Unpaid',
     paymentMethod: 'Cash',
     notes: 'Thank you for your business!',
     terms: 'Goods once sold cannot be returned. Payment due within 15 days.'
   });
 
-  useEffect(() => {
-    loadInvoices();
-    loadCustomersAndProducts();
-  }, [activeFilter, searchQuery]);
-
-  const loadInvoices = async () => {
+  const loadInvoices = useCallback(async () => {
     try {
       setLoading(true);
       const params = {};
@@ -74,9 +68,9 @@ export default function InvoiceManagement({ onBack }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeFilter, searchQuery]);
 
-  const loadCustomersAndProducts = async () => {
+  const loadCustomersAndProducts = useCallback(async () => {
     try {
       const [cList, pList] = await Promise.all([
         customerApi.getAll(),
@@ -85,18 +79,25 @@ export default function InvoiceManagement({ onBack }) {
       setCustomers(cList || []);
       setProducts(pList || []);
 
-      if (cList && cList.length > 0 && !newInvoice.customer) {
-        setNewInvoice(prev => ({
-          ...prev,
-          customer: cList[0].name,
-          customerPhone: cList[0].phone || '',
-          customerGstin: cList[0].gst || ''
+      if (cList?.length) {
+        setNewInvoice(prev => prev.customer ? prev : ({
+          ...prev, customer: cList[0].name, customerPhone: cList[0].phone || '', customerGstin: cList[0].gst || ''
         }));
       }
     } catch (err) {
       console.error('Error loading master data:', err);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadInvoices, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadInvoices]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(loadCustomersAndProducts, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadCustomersAndProducts]);
 
   const handleCustomerSelect = (custName) => {
     const found = customers.find(c => c.name === custName);
@@ -112,11 +113,8 @@ export default function InvoiceManagement({ onBack }) {
     const prod = products.find(p => p._id === prodId || p.productId === prodId);
     if (!prod) return;
 
-    let taxNum = 18;
-    if (prod.taxRate) {
-      const parsed = parseFloat(prod.taxRate.replace(/[^0-9.]/g, ''));
-      if (!isNaN(parsed)) taxNum = parsed;
-    }
+    const parsedTax = parseFloat(String(prod.taxRate || '').replace(/[^0-9.]/g, ''));
+    const taxNum = Number.isFinite(parsedTax) ? parsedTax : 0;
 
     setNewInvoice(prev => ({
       ...prev,
@@ -130,7 +128,7 @@ export default function InvoiceManagement({ onBack }) {
             productId: prod._id,
             name: prod.name,
             description: prod.category || '',
-            hsnCode: prod.hsnCode || '998311',
+            hsnCode: prod.hsnCode || '',
             rate,
             tax: taxNum,
             amount: (qty * rate) + itemTax
@@ -146,7 +144,7 @@ export default function InvoiceManagement({ onBack }) {
       ...prev,
       items: [
         ...prev.items,
-        { id: Date.now(), productId: '', name: '', description: '', hsnCode: '998311', qty: 1, rate: 0, tax: 18, amount: 0 }
+        { id: Date.now(), productId: '', name: '', description: '', hsnCode: '', qty: 1, rate: 0, tax: 0, amount: 0 }
       ]
     }));
   };
@@ -198,7 +196,8 @@ export default function InvoiceManagement({ onBack }) {
 
     try {
       const payload = {
-        invoiceNumber: newInvoice.id,
+        invoiceNumber: newInvoice.id || undefined,
+        customerId: customers.find(customer => customer.name === newInvoice.customer)?._id,
         customerName: newInvoice.customer,
         customerPhone: newInvoice.customerPhone,
         customerGstin: newInvoice.customerGstin,
@@ -240,17 +239,17 @@ export default function InvoiceManagement({ onBack }) {
 
       // Reset form
       setNewInvoice({
-        id: `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`,
+        id: '',
         customer: customers.length > 0 ? customers[0].name : '',
         customerPhone: customers.length > 0 ? customers[0].phone : '',
         customerGstin: customers.length > 0 ? customers[0].gst : '',
-        date: new Date().toISOString().split('T')[0],
-        dueDate: new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
+        date: '',
+        dueDate: '',
         type: 'Tax Invoice',
-        items: [{ id: Date.now(), productId: '', name: '', description: '', hsnCode: '998311', qty: 1, rate: 0, tax: 18, amount: 0 }],
+        items: [{ id: 1, productId: '', name: '', description: '', hsnCode: '', qty: 1, rate: 0, tax: 0, amount: 0 }],
         discount: 0,
         discountType: '%',
-        paymentStatus: 'Paid',
+        paymentStatus: 'Unpaid',
         paymentMethod: 'Cash',
         notes: 'Thank you for your business!',
         terms: 'Goods once sold cannot be returned.'
@@ -396,7 +395,9 @@ export default function InvoiceManagement({ onBack }) {
               </tr>
             </thead>
             <tbody>
-              {invoices.length === 0 ? (
+              {loading ? (
+                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '2rem' }}>Loading invoices…</td></tr>
+              ) : invoices.length === 0 ? (
                 <tr>
                   <td colSpan="6" style={{ textAlign: 'center', padding: '3rem', opacity: 0.7 }}>
                     No invoices found. Click <strong>+ Create Invoice</strong> to generate your first bill.
@@ -407,7 +408,7 @@ export default function InvoiceManagement({ onBack }) {
                   const invId = inv.invoiceNumber || inv.id || 'INV-000';
                   const custName = inv.customerName || inv.customer || inv.clientName || 'Cash Sale';
                   const amount = inv.grandTotal || inv.amount || 0;
-                  const st = inv.paymentStatus || inv.status || 'Paid';
+                  const st = inv.paymentStatus || inv.status || 'Unpaid';
                   const dateStr = inv.date ? new Date(inv.date).toLocaleDateString() : 'N/A';
                   const dueStr = inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : dateStr;
 
@@ -515,6 +516,7 @@ export default function InvoiceManagement({ onBack }) {
               <input
                 type="text"
                 value={newInvoice.id}
+                placeholder="Auto-generated when saved"
                 onChange={(e) => setNewInvoice({ ...newInvoice, id: e.target.value })}
               />
             </div>
@@ -720,27 +722,31 @@ export default function InvoiceManagement({ onBack }) {
 
   const renderInvoicePreview = () => {
     const inv = selectedInvoice || invoices[0] || {};
-    const invId = inv.invoiceNumber || inv.id || 'INV-PREVIEW';
+    const invId = inv.invoiceNumber || inv.id || 'Invoice';
     const custName = inv.customerName || inv.customer || inv.clientName || 'Cash Sale';
     const custPhone = inv.customerPhone || '';
     const custGstin = inv.customerGstin || '';
-    const dateStr = inv.date ? new Date(inv.date).toLocaleDateString() : new Date().toLocaleDateString();
-    const dueStr = inv.dueDate ? new Date(inv.dueDate).toLocaleDateString() : dateStr;
-    const invItems = inv.items && inv.items.length > 0 ? inv.items : [
-      { name: 'Standard Item', qty: 1, rate: inv.grandTotal || inv.amount || 0, amount: inv.grandTotal || inv.amount || 0 }
-    ];
+    const dateStr = inv.date ? new Date(inv.date).toLocaleDateString('en-IN') : '—';
+    const dueStr = inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-IN') : dateStr;
+    const invItems = Array.isArray(inv.items) ? inv.items : [];
     const totalAmt = inv.grandTotal || inv.amount || 0;
-    const sub = inv.subtotal || (totalAmt * 0.84);
-    const taxAmt = inv.totalTax || (totalAmt - sub);
-    const st = inv.paymentStatus || inv.status || 'Paid';
+    const sub = inv.subtotal ?? invItems.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.rate || 0)), 0);
+    const computedTax = invItems.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.rate || 0) - Number(item.discount || 0)) * Number(item.taxRate || 0) / 100, 0);
+    const taxAmt = inv.totalTax ?? computedTax;
+    const cgst = inv.cgstTotal !== undefined ? inv.cgstTotal : (taxAmt / 2);
+    const sgst = inv.sgstTotal !== undefined ? inv.sgstTotal : (taxAmt / 2);
+    const discountAmt = inv.discountAmount || 0;
+    const st = inv.paymentStatus || inv.status || 'Unpaid';
     const balance = inv.balanceAmount !== undefined ? inv.balanceAmount : (st === 'Paid' ? 0 : totalAmt);
+    const themeColor = activeTemplate === 'corporate' ? '#1e3a8a' : activeTemplate === 'minimal' ? '#0f766e' : '#6b21a8';
 
     return (
       <div className="inv-preview-view fade-in">
-        <div className="inv-header">
+        {/* Screen-only action bar */}
+        <div className="inv-header no-print">
           <div>
             <button className="back-btn" onClick={() => setActiveView('dashboard')}>← Back to Invoices</button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '0.5rem' }}>
               <h2 className="inv-title">{invId}</h2>
               <span className={`status-badge ${st.toLowerCase()}`}>{st}</span>
               {balance > 0 && (
@@ -752,12 +758,11 @@ export default function InvoiceManagement({ onBack }) {
             <select
               value={activeTemplate}
               onChange={(e) => setActiveTemplate(e.target.value)}
-              className="btn-secondary"
-              style={{ padding: '0.6rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+              style={{ padding: '0.6rem 0.9rem', borderRadius: '8px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '0.9rem' }}
             >
-              <option value="modern">A4 Modern Theme (Indigo)</option>
+              <option value="modern">A4 Modern (Indigo)</option>
               <option value="corporate">A4 Corporate Blue</option>
-              <option value="minimal">A5 Clean Minimal (Teal)</option>
+              <option value="minimal">A5 Minimal (Teal)</option>
               <option value="thermal">POS Thermal Receipt</option>
             </select>
             {balance > 0 && (
@@ -765,8 +770,8 @@ export default function InvoiceManagement({ onBack }) {
                 <DollarSign size={16} /> Record Payment
               </button>
             )}
-            <button className="btn-secondary" onClick={() => window.print()} title="Print Document">
-              <Printer size={16} /> Print / Save PDF
+            <button className="btn-secondary" onClick={() => window.print()}>
+              <Printer size={16} /> Print / PDF
             </button>
             <button className="btn-secondary" onClick={() => handleWhatsAppShare(inv)}>
               <Share2 size={16} /> WhatsApp
@@ -774,167 +779,181 @@ export default function InvoiceManagement({ onBack }) {
           </div>
         </div>
 
-        {/* Invoice Paper Document for Print / Export */}
-        <div className={`invoice-paper template-${activeTemplate}`}>
-          {activeTemplate === 'thermal' ? (
-            <div className="thermal-receipt-layout" style={{ maxWidth: '320px', margin: '0 auto', fontFamily: 'monospace', padding: '1rem', background: '#fff', color: '#000' }}>
-              <div style={{ textAlign: 'center', borderBottom: '1px dashed #000', paddingBottom: '0.5rem' }}>
-                <h3 style={{ margin: 0, fontSize: '1.2rem' }}>YOURBILL SMART POS</h3>
-                <p style={{ margin: '4px 0', fontSize: '0.8rem' }}>101, Tech Park, Corporate Blvd</p>
-                <p style={{ margin: '4px 0', fontSize: '0.8rem' }}>GSTIN: 27AABCU9603R1ZX</p>
-                <p style={{ margin: '4px 0', fontSize: '0.8rem' }}>Phone: +91 98765 43210</p>
-              </div>
-              <div style={{ padding: '0.5rem 0', fontSize: '0.85rem', borderBottom: '1px dashed #000' }}>
-                <div><strong>INV NO:</strong> {invId}</div>
-                <div><strong>DATE:</strong> {dateStr}</div>
-                <div><strong>CUSTOMER:</strong> {custName}</div>
-                {custPhone && <div><strong>PHONE:</strong> {custPhone}</div>}
-              </div>
-              <table style={{ width: '100%', fontSize: '0.85rem', margin: '0.5rem 0', borderCollapse: 'collapse' }}>
+        {/* ── PRINTABLE INVOICE ── */}
+        {activeTemplate === 'thermal' ? (
+          <div className="thermal-wrapper">
+            <div className="thermal-header">
+              <h3>{user?.companyName || 'Business'}</h3>
+              {user?.address && <p>{user.address}</p>}
+              {(user?.city || user?.state || user?.pincode) && <p>{[user.city, user.state, user.pincode].filter(Boolean).join(', ')}</p>}
+              {user?.gstin && <p>GSTIN: {user.gstin}</p>}
+              {user?.phone && <p>Phone: {user.phone}</p>}
+            </div>
+            <div className="thermal-info">
+              <div className="thermal-info-row"><span className="tlabel">INV NO:</span><span>{invId}</span></div>
+              <div className="thermal-info-row"><span className="tlabel">DATE:</span><span>{dateStr}</span></div>
+              <div className="thermal-info-row"><span className="tlabel">CUSTOMER:</span><span>{custName}</span></div>
+              {custPhone && <div className="thermal-info-row"><span className="tlabel">PHONE:</span><span>{custPhone}</span></div>}
+            </div>
+            <div className="thermal-items">
+              <table>
                 <thead>
-                  <tr style={{ borderBottom: '1px dashed #000' }}>
-                    <th style={{ textAlign: 'left' }}>ITEM</th>
-                    <th style={{ textAlign: 'center' }}>QTY</th>
-                    <th style={{ textAlign: 'right' }}>AMT</th>
+                  <tr>
+                    <th style={{ width: '44%', textAlign: 'left' }}>ITEM</th>
+                    <th style={{ width: '12%', textAlign: 'center' }}>QTY</th>
+                    <th style={{ width: '20%', textAlign: 'right' }}>RATE</th>
+                    <th style={{ width: '24%', textAlign: 'right' }}>AMT</th>
                   </tr>
                 </thead>
                 <tbody>
                   {invItems.map((it, idx) => (
                     <tr key={idx}>
-                      <td style={{ textAlign: 'left', padding: '2px 0' }}>{it.name}</td>
+                      <td>{it.name || '—'}</td>
                       <td style={{ textAlign: 'center' }}>{it.qty || 1}</td>
-                      <td style={{ textAlign: 'right' }}>₹{(it.amount || it.total || (it.qty * it.rate)).toFixed(2)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div style={{ borderTop: '1px dashed #000', paddingTop: '0.5rem', fontSize: '0.9rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Subtotal:</span> <span>₹{sub.toFixed(2)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Tax (GST):</span> <span>₹{taxAmt.toFixed(2)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1.1rem', marginTop: '4px' }}>
-                  <span>TOTAL:</span> <span>₹{totalAmt.toFixed(2)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                  <span>Status:</span> <span>{st} ({inv.paymentMethod || 'Cash'})</span>
-                </div>
-              </div>
-              <div style={{ textAlign: 'center', marginTop: '1rem', borderTop: '1px dashed #000', paddingTop: '0.5rem', fontSize: '0.75rem' }}>
-                <p>Thank you for your business!</p>
-                <p>Visit again soon!</p>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="paper-header">
-                <div className="company-details">
-                  <h1 style={{ color: activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '1.8rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>
-                    🏢 Nexus Business Solutions Pvt Ltd
-                  </h1>
-                  <p><strong>GSTIN:</strong> 27AABCU9603R1ZX | <strong>PAN:</strong> AABCU9603R</p>
-                  <p>101, Tech Park, Corporate Boulevard, Mumbai - 400001</p>
-                  <p>Phone: +91 98765 43210 | Email: billing@nexusbiz.com</p>
-                </div>
-                <div className="invoice-title-area">
-                  <h2 style={{ color: activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8', fontSize: '2.2rem', fontWeight: 'bold' }}>
-                    {inv.type || 'TAX INVOICE'}
-                  </h2>
-                  <div className="meta-info" style={{ textAlign: 'left', marginTop: '1rem' }}>
-                    <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '0.3rem' }}>
-                      <span style={{ minWidth: '90px', color: '#64748b' }}>Invoice No:</span>
-                      <strong>{invId}</strong>
-                    </div>
-                    <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '0.3rem' }}>
-                      <span style={{ minWidth: '90px', color: '#64748b' }}>Invoice Date:</span>
-                      <span>{dateStr}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '0.3rem' }}>
-                      <span style={{ minWidth: '90px', color: '#64748b' }}>Due Date:</span>
-                      <span>{dueStr}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="billing-details" style={{ marginTop: '1.5rem' }}>
-                <div style={{ background: activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8', color: '#fff', padding: '0.4rem 1rem', display: 'inline-block', borderRadius: '4px 4px 0 0', fontWeight: 'bold' }}>
-                  BILLED TO
-                </div>
-                <div style={{ border: `1px solid ${activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8'}`, padding: '1.2rem', borderRadius: '0 4px 4px 4px', maxWidth: '400px' }}>
-                  <strong style={{ fontSize: '1.1rem', color: '#000' }}>{custName}</strong>
-                  {custPhone && <p style={{ color: '#333', margin: '4px 0' }}>Phone: {custPhone}</p>}
-                  {custGstin && <p style={{ color: '#333', margin: '4px 0' }}>GSTIN: {custGstin}</p>}
-                  <p style={{ color: '#333', margin: '4px 0' }}>Payment Mode: {inv.paymentMethod || 'Cash'}</p>
-                </div>
-              </div>
-
-              <table className="paper-table" style={{ marginTop: '2rem' }}>
-                <thead>
-                  <tr>
-                    <th style={{ background: activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8', color: '#fff' }}>#</th>
-                    <th style={{ background: activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8', color: '#fff' }}>ITEM DESCRIPTION</th>
-                    <th style={{ background: activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8', color: '#fff' }}>HSN</th>
-                    <th style={{ background: activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8', color: '#fff' }}>QTY</th>
-                    <th style={{ background: activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8', color: '#fff' }}>RATE</th>
-                    <th style={{ background: activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8', color: '#fff' }}>TAX RATE</th>
-                    <th style={{ background: activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8', color: '#fff' }}>AMOUNT</th>
-                  </tr>
-                </thead>
-                <tbody style={{ color: '#000' }}>
-                  {invItems.map((it, idx) => (
-                    <tr key={idx}>
-                      <td>{idx + 1}</td>
-                      <td style={{ fontWeight: '500' }}>{it.name}</td>
-                      <td>{it.hsnCode || '998311'}</td>
-                      <td>{it.qty || 1}</td>
-                      <td>₹{(it.rate || it.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-                      <td>{it.taxRate ? `${it.taxRate}%` : '18%'}</td>
-                      <td style={{ fontWeight: 'bold' }}>
-                        ₹{(it.amount || it.total || (it.qty * it.rate)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      <td style={{ textAlign: 'right' }}>₹{(it.rate || 0).toFixed(2)}</td>
+                      <td style={{ textAlign: 'right', fontWeight: 'bold' }}>
+                        ₹{(it.amount || it.total || ((it.qty || 1) * (it.rate || 0))).toFixed(2)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="thermal-totals">
+              <div className="thermal-total-row"><span>Subtotal:</span><span>₹{sub.toFixed(2)}</span></div>
+              <div className="thermal-total-row"><span>CGST:</span><span>₹{cgst.toFixed(2)}</span></div>
+              <div className="thermal-total-row"><span>SGST:</span><span>₹{sgst.toFixed(2)}</span></div>
+              {discountAmt > 0 && <div className="thermal-total-row"><span>Discount:</span><span>-₹{discountAmt.toFixed(2)}</span></div>}
+              <div className="thermal-total-row thermal-grand"><span>TOTAL:</span><span>₹{totalAmt.toFixed(2)}</span></div>
+              <div className="thermal-total-row" style={{ marginTop: '6px', fontSize: '12px' }}>
+                <span>Status:</span><span>{st} ({inv.paymentMethod || 'Cash'})</span>
+              </div>
+            </div>
+            <div className="thermal-footer">
+              <p>Thank you for your business!</p>
+              <p>Visit again soon!</p>
+            </div>
+          </div>
+        ) : (
+          /* ── A4 / A5 INVOICE ── */
+          <div className={`invoice-paper template-${activeTemplate}`}>
+            {st === 'Paid' && <div className="watermark-paid">PAID</div>}
 
-              <div className="paper-footer" style={{ marginTop: '2rem', display: 'flex', justifyContent: 'space-between' }}>
-                <div className="terms-area" style={{ flex: 1, paddingRight: '2rem' }}>
-                  <h3 style={{ textTransform: 'uppercase', fontSize: '0.85rem', marginBottom: '0.5rem', fontWeight: 'bold' }}>TERMS & CONDITIONS</h3>
-                  <ol style={{ paddingLeft: '1rem', color: '#64748b', fontSize: '0.85rem', margin: 0 }}>
-                    <li>{inv.terms || 'Payment due within 15 days.'}</li>
-                    <li>Goods once sold are covered under respective manufacturer warranty.</li>
-                  </ol>
-                  <p style={{ marginTop: '1.5rem', color: '#16a34a', fontWeight: 'bold' }}>
-                    {inv.notes || 'Thank you for your business!'}
-                  </p>
-                </div>
+            {/* Header */}
+            <div className="paper-header" style={{ borderBottom: `3px solid ${themeColor}` }}>
+              <div className="company-details">
+                <h1 style={{ color: themeColor }}>🏢 {user?.companyName || 'Your Business'}</h1>
+                {(user?.gstin || user?.pan) && <p>{user?.gstin && <><strong>GSTIN:</strong> {user.gstin}</>}{user?.gstin && user?.pan && '  |  '}{user?.pan && <><strong>PAN:</strong> {user.pan}</>}</p>}
+                {[user?.address, user?.city, user?.state, user?.pincode].filter(Boolean).length > 0 && <p>{[user?.address, user?.city, user?.state, user?.pincode].filter(Boolean).join(', ')}</p>}
+                {(user?.phone || user?.email) && <p>{user?.phone && <>Phone: {user.phone}</>}{user?.phone && user?.email && '  |  '}{user?.email && <>Email: {user.email}</>}</p>}
+              </div>
+              <div className="invoice-title-area">
+                <h2 style={{ color: themeColor }}>{inv.type || 'TAX INVOICE'}</h2>
+                <table className="inv-meta-table">
+                  <tbody>
+                    <tr><td>Invoice No:</td><td>{invId}</td></tr>
+                    <tr><td>Invoice Date:</td><td>{dateStr}</td></tr>
+                    <tr><td>Due Date:</td><td>{dueStr}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-                <div className="paper-totals" style={{ width: '320px' }}>
-                  <div className="p-total-row" style={{ border: 'none', padding: '0.4rem 1rem', color: '#000' }}>
-                    <span>Subtotal:</span>
-                    <span>₹{sub.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="p-total-row" style={{ border: 'none', padding: '0.4rem 1rem', color: '#000' }}>
-                    <span>GST (Tax):</span>
-                    <span>₹{taxAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div className="p-total-row p-grand-total" style={{ background: activeTemplate === 'corporate' ? '#1e3a8a' : '#6b21a8', color: '#fff', padding: '0.8rem', margin: 0, border: 'none' }}>
-                    <span>Grand Total:</span>
-                    <span>₹{totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div style={{ textAlign: 'right', marginTop: '2rem', color: '#000', fontSize: '0.85rem' }}>
-                    <div style={{ display: 'inline-block', borderTop: '1px solid #000', paddingTop: '0.5rem', width: '200px', textAlign: 'center' }}>
-                      Authorized Signatory
-                    </div>
-                  </div>
+            {/* Billing Details */}
+            <div className="billing-section">
+              <div className="bill-to-box">
+                <span className="section-label-strip" style={{ background: themeColor }}>BILLED TO</span>
+                <div className="box-content" style={{ border: `1.5px solid ${themeColor}` }}>
+                  <div className="customer-name">{custName}</div>
+                  {custPhone && <div className="customer-detail">📞 {custPhone}</div>}
+                  {custGstin && <div className="customer-detail">GSTIN: {custGstin}</div>}
+                  <div className="customer-detail">Payment Mode: {inv.paymentMethod || 'Cash'}</div>
                 </div>
               </div>
-            </>
-          )}
-        </div>
+              <div className="payment-info-box">
+                <span className="pay-label">Payment Status</span>
+                <div className="pay-method">{inv.paymentMethod || 'Cash'}</div>
+                <span className={`pay-badge ${st.toLowerCase()}`}>{st}</span>
+                {balance > 0 && (
+                  <div style={{ marginTop: '8px', fontSize: '11px', color: '#dc2626', fontWeight: 600 }}>
+                    Balance Due: ₹{balance.toLocaleString('en-IN')}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Items Table */}
+            <table className="paper-table">
+              <thead>
+                <tr>
+                  {['#', 'ITEM DESCRIPTION', 'HSN/SAC', 'QTY', 'RATE (₹)', 'TAX %', 'AMOUNT (₹)'].map(h => (
+                    <th key={h} style={{ background: themeColor }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {invItems.map((it, idx) => (
+                  <tr key={idx}>
+                    <td>{idx + 1}</td>
+                    <td>
+                      <span className="item-name">{it.name || '—'}</span>
+                      {it.description && <span className="item-desc">{it.description}</span>}
+                    </td>
+                    <td style={{ textAlign: 'center' }}>{it.hsnCode || '998311'}</td>
+                    <td style={{ textAlign: 'center' }}>{it.qty || 1}</td>
+                    <td style={{ textAlign: 'right' }}>₹{(it.rate || it.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                    <td style={{ textAlign: 'center' }}>{it.taxRate !== undefined ? `${it.taxRate}%` : '18%'}</td>
+                    <td style={{ fontWeight: 'bold', textAlign: 'right' }}>
+                      ₹{(it.amount || it.total || ((it.qty || 1) * (it.rate || 0))).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Footer: Terms + Totals */}
+            <div className="paper-footer">
+              <div className="terms-area">
+                <h4>Terms &amp; Conditions</h4>
+                <ol>
+                  <li>{inv.terms || 'Payment due within 15 days.'}</li>
+                  <li>Goods once sold are covered under manufacturer warranty.</li>
+                  <li>Disputes subject to Mumbai jurisdiction.</li>
+                </ol>
+                <div className="thankyou-note">✅ {inv.notes || 'Thank you for your business!'}</div>
+              </div>
+
+              <div className="paper-totals">
+                <div className="p-total-row">
+                  <span>Subtotal</span>
+                  <span>₹{sub.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="tax-breakup-row">
+                  <span>CGST</span>
+                  <span>₹{cgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="tax-breakup-row">
+                  <span>SGST</span>
+                  <span>₹{sgst.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                {discountAmt > 0 && (
+                  <div className="p-total-row" style={{ color: '#16a34a' }}>
+                    <span>Discount</span>
+                    <span>–₹{discountAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  </div>
+                )}
+                <div className="p-total-row p-grand-total" style={{ background: themeColor }}>
+                  <span>Grand Total</span>
+                  <span>₹{totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                </div>
+                <div className="sign-area">
+                  <div style={{ height: '40px' }}></div>
+                  <p>Authorized Signatory</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Record Payment Modal */}
         {showPaymentModal && (
@@ -948,7 +967,7 @@ export default function InvoiceManagement({ onBack }) {
                   type="number"
                   value={paymentAmount}
                   onChange={(e) => setPaymentAmount(e.target.value)}
-                  style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                  style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                 />
               </div>
               <div style={{ marginBottom: '1.5rem' }}>
@@ -956,7 +975,7 @@ export default function InvoiceManagement({ onBack }) {
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                  style={{ width: '100%', padding: '0.6rem', borderRadius: '6px', border: '1px solid var(--border-color)', background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
                 >
                   <option value="Cash">Cash</option>
                   <option value="UPI">UPI / QR Code</option>

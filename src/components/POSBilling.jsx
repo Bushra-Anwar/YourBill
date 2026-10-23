@@ -1,23 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { Search, ChevronDown, Share, FileText, Trash2, Save, Printer, Plus, Minus, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, Printer } from 'lucide-react';
 import './POSBilling.css';
 import { productApi, invoiceApi } from '../api';
+import { AuthContext } from '../context/AuthContextValue';
 
 export default function POSBilling({ onBack }) {
+  const { user } = React.useContext(AuthContext);
   const [cartItems, setCartItems] = useState([]);
   const [products, setProducts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [currency, setCurrency] = useState('₹');
+  const currency = user?.currency || '₹';
   const [paymentMode, setPaymentMode] = useState('Cash');
   const [tenderedAmount, setTenderedAmount] = useState('');
   const [lastInvoice, setLastInvoice] = useState(null);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
 
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     try {
       const data = await productApi.getAll();
       if (data && data.length > 0) {
@@ -26,28 +24,24 @@ export default function POSBilling({ onBack }) {
     } catch (err) {
       console.error("Error fetching products:", err);
     }
-  };
+  }, []);
 
-  const getExchangeRate = (curr) => {
-    switch (curr) {
-      case '₹': return 1.0;
-      case '$': return 0.012;
-      case '€': return 0.011;
-      case '£': return 0.0095;
-      default: return 1.0;
-    }
-  };
+  useEffect(() => {
+    const timer = window.setTimeout(() => { loadProducts(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [loadProducts]);
 
-  const formatPrice = (amount) => {
-    const rate = getExchangeRate(currency);
-    const converted = (amount || 0) * rate;
-    return `${currency}${converted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
+  const formatPrice = amount => `${currency}${Number(amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const addItemToCart = (product) => {
+    const existing = cartItems.find(item => item._id === product._id);
+    if (product.type === 'Physical Product' && Number(existing?.qty || 0) >= Number(product.stock || 0)) {
+      alert('Available stock is not enough for another item.');
+      return;
+    }
     setCartItems(prev => {
-      const existing = prev.find(item => item._id === product._id);
-      if (existing) {
+      const cartProduct = prev.find(item => item._id === product._id);
+      if (cartProduct) {
         return prev.map(item => item._id === product._id ? { ...item, qty: item.qty + 1 } : item);
       }
       return [...prev, { ...product, qty: 1 }];
@@ -55,6 +49,12 @@ export default function POSBilling({ onBack }) {
   };
 
   const updateQuantity = (id, delta) => {
+    const cartItem = cartItems.find(item => item._id === id);
+    const product = products.find(item => item._id === id);
+    if (delta > 0 && product?.type === 'Physical Product' && Number(cartItem?.qty || 0) >= Number(product.stock || 0)) {
+      alert('Available stock is not enough for another item.');
+      return;
+    }
     setCartItems(prev => prev.map(item => {
       if (item._id === id) {
         const newQty = item.qty + delta;
@@ -75,9 +75,9 @@ export default function POSBilling({ onBack }) {
 
   const subtotal = calculateSubtotal();
   const taxAmount = cartItems.reduce((sum, item) => {
-    let taxPercent = 18;
+    let taxPercent = 0;
     if (item.taxRate) {
-      const p = parseFloat(item.taxRate.replace(/[^0-9.]/g, ''));
+      const p = parseFloat(String(item.taxRate).replace(/[^0-9.]/g, ''));
       if (!isNaN(p)) taxPercent = p;
     }
     return sum + (((item.price || 0) * (item.qty || 1) * taxPercent) / 100);
@@ -88,37 +88,44 @@ export default function POSBilling({ onBack }) {
 
   const handleCompleteSale = async () => {
     if (cartItems.length === 0) return alert('Cart is empty! Add products first.');
+    if ((parseFloat(tenderedAmount) || 0) < finalTotal) return alert('Received amount must cover the total payable.');
 
     try {
-      const invoiceNumber = `POS-${Date.now().toString().slice(-6)}`;
+      const invoiceNumber = undefined;
       const payload = {
         invoiceNumber,
         customerName: 'Walk-in Retail Customer',
         type: 'POS Bill',
-        items: cartItems.map(item => ({
-          productId: item._id,
-          name: item.name,
-          sku: item.sku || '',
-          hsnCode: item.hsnCode || '998311',
-          qty: item.qty,
-          rate: item.price,
-          taxRate: item.taxRate ? parseFloat(item.taxRate.replace(/[^0-9.]/g, '')) || 18 : 18,
-          amount: (item.price * item.qty) + (((item.price * item.qty) * 18) / 100)
-        })),
+        items: cartItems.map(item => {
+          const taxPercent = item.taxRate ? parseFloat(String(item.taxRate).replace(/[^0-9.]/g, '')) || 0 : 0;
+          const baseAmount = (Number(item.price) || 0) * item.qty;
+          return {
+            productId: item._id,
+            name: item.name,
+            sku: item.sku || '',
+            hsnCode: item.hsnCode || '',
+            quantity: item.qty,
+            qty: item.qty,
+            rate: item.price,
+            taxRate: taxPercent,
+            amount: baseAmount + (baseAmount * taxPercent / 100)
+          };
+        }),
         subtotal,
         totalTax: taxAmount,
         grandTotal: finalTotal,
+        totalAmount: finalTotal,
         paidAmount: finalTotal,
         balanceAmount: 0,
         paymentStatus: 'Paid',
         paymentMethod: paymentMode,
-        notes: `Tendered: ₹${tenderedAmount || finalTotal}, Change: ₹${changeDue.toFixed(2)}`
+        notes: `Tendered: ${currency}${tenderedAmount || finalTotal}, Change: ${currency}${changeDue.toFixed(2)}`
       };
 
       const saved = await invoiceApi.create(payload);
       setLastInvoice(saved);
       setShowCheckoutModal(false);
-      alert(`✅ Sale completed! Receipt #${invoiceNumber} recorded in database.`);
+      alert(`Sale completed! Receipt #${saved.invoiceNumber} recorded in the database.`);
       setCartItems([]);
       setTenderedAmount('');
       // Reload products to show updated stock
@@ -143,16 +150,7 @@ export default function POSBilling({ onBack }) {
           <h2 className="pos-main-title">Fast POS Terminal</h2>
         </div>
         <div className="pos-top-actions">
-          <select
-            value={currency}
-            onChange={(e) => setCurrency(e.target.value)}
-            style={{ padding: '0.5rem', borderRadius: '8px', border: '1px solid #e0e5f2', background: 'white', color: '#1b2559', fontWeight: '600', cursor: 'pointer' }}
-          >
-            <option value="₹">INR (₹)</option>
-            <option value="$">USD ($)</option>
-            <option value="€">EUR (€)</option>
-            <option value="£">GBP (£)</option>
-          </select>
+          <span className="pos-currency-label">Currency · {currency}</span>
           <button className="pos-btn-share" onClick={() => window.print()}>
             <Printer size={16} /> Print Receipt
           </button>
@@ -285,9 +283,9 @@ export default function POSBilling({ onBack }) {
           <div className="pos-receipt">
             <div className="receipt-header">
               <h3>TAX INVOICE / RECEIPT</h3>
-              <p>YourBill Retail Outlet</p>
-              <p>GSTIN: 27AABCU9603R1ZX</p>
-              <p>{new Date().toLocaleString()}</p>
+              <p>{user?.companyName || 'Your business'}</p>
+              {user?.gstin && <p>GSTIN: {user.gstin}</p>}
+              <p>{lastInvoice?.date ? new Date(lastInvoice.date).toLocaleString() : 'Receipt preview'}</p>
             </div>
             <div className="receipt-body">
               {cartItems.map(item => (
@@ -355,7 +353,7 @@ export default function POSBilling({ onBack }) {
             </div>
 
             <div style={{ marginBottom: '1rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 'bold' }}>Tendered Cash Amount (₹)</label>
+              <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 'bold' }}>Amount Received ({currency})</label>
               <input
                 type="number"
                 value={tenderedAmount}
@@ -370,7 +368,7 @@ export default function POSBilling({ onBack }) {
                     onClick={() => setTenderedAmount(v)}
                     style={{ flex: 1, padding: '0.4rem', borderRadius: '4px', border: '1px solid #ddd', background: '#f1f5f9', cursor: 'pointer' }}
                   >
-                    ₹{v}
+                    {formatPrice(v)}
                   </button>
                 ))}
               </div>
@@ -378,7 +376,7 @@ export default function POSBilling({ onBack }) {
 
             <div style={{ margin: '1rem 0', padding: '0.8rem', background: '#ecfdf5', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', color: '#065f46' }}>
               <span>Change to Return:</span>
-              <strong style={{ fontSize: '1.2rem' }}>₹{changeDue.toFixed(2)}</strong>
+              <strong style={{ fontSize: '1.2rem' }}>{formatPrice(changeDue)}</strong>
             </div>
 
             <div style={{ display: 'flex', gap: '1rem', marginTop: '1.5rem' }}>

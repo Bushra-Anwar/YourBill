@@ -1,30 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Sparkles, TrendingUp, AlertTriangle, MessageSquare, 
-  FileText, ShieldAlert, Zap, UploadCloud, PieChart, Send, Bot, BrainCircuit, Activity,
-  CheckCircle, ArrowRight, Loader2, RefreshCw
-} from 'lucide-react';
-import { aiApi, invoiceApi } from '../api';
+import { useState, useEffect } from 'react';
+import { Sparkles, TrendingUp, AlertTriangle, FileText, ShieldAlert, UploadCloud, Send, Bot, BrainCircuit, Activity, CheckCircle, Loader2, RefreshCw } from 'lucide-react';
+import { aiApi } from '../api';
 import './AIFeatures.css';
 
 export default function AIFeatures({ onBack }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   
   // Forecast & KPI state
-  const [forecast, setForecast] = useState({
-    revenueForecast: 1250000,
-    growthPercent: 17.5,
-    cashFlowStatus: 'Healthy',
-    expectedCollections: 280000,
-    fraudAlertsCount: 0,
-    autoCategorizedRate: 96
-  });
+  const [forecast, setForecast] = useState(null);
   const [loadingForecast, setLoadingForecast] = useState(false);
 
   // NLP Invoicing state
-  const [promptInput, setPromptInput] = useState(
-    "Create an invoice for TechNova Solutions. Product: Business Laptop. Quantity: 3. Price: 65,000 INR each. Apply 18% GST."
-  );
+  const [promptInput, setPromptInput] = useState('');
   const [parsedInvoice, setParsedInvoice] = useState(null);
   const [isParsing, setIsParsing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -41,12 +28,7 @@ export default function AIFeatures({ onBack }) {
   const [isChatLoading, setIsChatLoading] = useState(false);
 
   // Auto-categorization approval queue state
-  const [expensesQueue, setExpensesQueue] = useState([
-    { id: 1, desc: 'Uber Ride - Client Meeting', amount: 550, category: 'Travel Expense', confidence: 98, approved: false },
-    { id: 2, desc: 'Swiggy Team Lunch', amount: 1240, category: 'Food & Meals', confidence: 95, approved: false },
-    { id: 3, desc: 'AWS Cloud Hosting', amount: 18500, category: 'Software & Cloud', confidence: 99, approved: false },
-    { id: 4, desc: 'Office Stationery & Printing', amount: 4500, category: 'Office Supplies', confidence: 91, approved: false }
-  ]);
+  const [expensesQueue, setExpensesQueue] = useState([]);
 
   // Load forecast on mount
   useEffect(() => {
@@ -57,9 +39,7 @@ export default function AIFeatures({ onBack }) {
     setLoadingForecast(true);
     try {
       const data = await aiApi.getForecast();
-      if (data && data.revenueForecast) {
-        setForecast(data);
-      }
+      if (data && (data.revenueForecast !== undefined || data.expectedCollections !== undefined)) setForecast(data);
     } catch (err) {
       console.error('Failed to load forecast:', err);
     } finally {
@@ -139,16 +119,16 @@ export default function AIFeatures({ onBack }) {
           <div className="metric-icon bg-blue"><TrendingUp size={24}/></div>
           <div className="metric-info">
             <h4>Revenue Forecast (Next Mo)</h4>
-            <div className="metric-value">₹{(forecast.revenueForecast || 1175000).toLocaleString('en-IN')}</div>
-            <div className="metric-trend positive">↑ {forecast.growthPercent || 17.5}% Predicted Growth</div>
+            <div className="metric-value">{forecast?.revenueForecast != null ? `₹${Number(forecast.revenueForecast).toLocaleString('en-IN')}` : '—'}</div>
+            <div className="metric-trend">{forecast ? `${forecast.growthPercent ?? '—'}% forecast growth` : 'No forecast data available'}</div>
           </div>
         </div>
         <div className="metric-card">
           <div className="metric-icon bg-green"><Activity size={24}/></div>
           <div className="metric-info">
             <h4>Cash Flow Prediction</h4>
-            <div className="metric-value">{forecast.cashFlowStatus || 'Healthy'}</div>
-            <div className="metric-trend positive">₹{(forecast.expectedCollections || 280000).toLocaleString('en-IN')} collections expected</div>
+            <div className="metric-value">{forecast?.cashFlowStatus || '—'}</div>
+            <div className="metric-trend">{forecast?.expectedCollections != null ? `₹${Number(forecast.expectedCollections).toLocaleString('en-IN')} expected collections` : 'No collection forecast available'}</div>
           </div>
         </div>
         <div className="metric-card">
@@ -156,14 +136,14 @@ export default function AIFeatures({ onBack }) {
           <div className="metric-info">
             <h4>Fraud & Risk Alerts</h4>
             <div className="metric-value text-green">{forecast.fraudAlertsCount || 0}</div>
-            <div className="metric-trend positive">0 Anomalies detected</div>
+            <div className="metric-trend">{forecast ? 'Based on available analysis' : 'No analysis data available'}</div>
           </div>
         </div>
         <div className="metric-card">
           <div className="metric-icon bg-purple"><Sparkles size={24}/></div>
           <div className="metric-info">
             <h4>Auto-Categorized</h4>
-            <div className="metric-value">{forecast.autoCategorizedRate || 96}%</div>
+            <div className="metric-value">{forecast?.autoCategorizedRate != null ? `${forecast.autoCategorizedRate}%` : '—'}</div>
             <div className="metric-trend">Expenses mapped by AI</div>
           </div>
         </div>
@@ -174,13 +154,7 @@ export default function AIFeatures({ onBack }) {
           <h3><Sparkles size={18} style={{marginRight:'8px', display:'inline-block', verticalAlign:'middle'}}/> Live Executive Summary</h3>
           <div style={{marginTop:'1.5rem', display:'flex', flexDirection:'column', gap:'1rem', lineHeight:'1.6', fontSize:'0.95rem'}}>
             <div style={{background:'var(--bg-color)', padding:'1.5rem', borderRadius:'12px', border:'1px solid var(--border-color)'}}>
-              <p style={{marginBottom:'1rem'}}><strong>Hello Admin, here is your AI briefing for today:</strong></p>
-              <ul style={{listStylePosition:'inside', margin:0, padding:0, display:'flex', flexDirection:'column', gap:'0.8rem'}}>
-                <li>Forecasted next month revenue reaches <strong>₹{(forecast.revenueForecast || 1175000).toLocaleString('en-IN')}</strong> based on customer purchasing trends.</li>
-                <li>Expected incoming receivables: <strong>₹{(forecast.expectedCollections || 280000).toLocaleString('en-IN')}</strong> within the next 10-15 days.</li>
-                <li>All tax ledgers (CGST/SGST/IGST) and HSN data streams are synchronized with automated double-entry postings.</li>
-                <li>Auto-categorization is currently active with <strong>96% accuracy</strong> across recent transactions.</li>
-              </ul>
+              <p style={{margin:0}}>{forecast ? 'Forecast summary is based on the data currently available to the AI service.' : 'No AI forecast is connected yet. Sync AI Models to load a forecast when the service is configured.'}</p>
             </div>
           </div>
         </div>
@@ -197,23 +171,7 @@ export default function AIFeatures({ onBack }) {
                 <th>Optimized Action</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td><strong>Global Tech Solutions</strong><br/><span className="sub-text">Prompt payer</span></td>
-                <td>Next Week</td>
-                <td><span className="status-badge info">Automated Email (T-3)</span></td>
-              </tr>
-              <tr>
-                <td><strong>Sarah Jenkins</strong><br/><span className="sub-text">Frequent partial settlement</span></td>
-                <td>Mar 15</td>
-                <td><span className="status-badge warning">WhatsApp Pay Link</span></td>
-              </tr>
-              <tr>
-                <td><strong>Acme Corp</strong><br/><span className="sub-text">Corporate verified</span></td>
-                <td>Mar 20</td>
-                <td><span className="status-badge success">Scheduled E-Invoice</span></td>
-              </tr>
-            </tbody>
+            <tbody><tr><td colSpan="3" className="empty-state">No payment follow-up recommendations available.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -338,7 +296,7 @@ export default function AIFeatures({ onBack }) {
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) {
-                  alert(`File "${file.name}" uploaded! AI OCR extracted Vendor: ${file.name.includes('AWS') ? 'Amazon AWS' : 'Office Supplies Mart'}, Total: ₹14,800, Tax: ₹2,257`);
+                  alert(`File "${file.name}" selected. OCR extraction is not configured yet, so no invoice data was generated.`);
                 }
               }} 
             />

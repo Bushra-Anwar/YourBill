@@ -1,10 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Landmark, BookOpen, PieChart, TrendingDown, TrendingUp,
-  DollarSign, FileText, CheckCircle, Search, Plus, Filter,
-  RefreshCw, Settings, AlertTriangle, Lock, FileSpreadsheet,
-  Trash2, Loader2, ArrowRight
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Landmark, PieChart, TrendingDown, TrendingUp, CheckCircle, Plus, RefreshCw, FileSpreadsheet, Trash2, Loader2 } from 'lucide-react';
 import { accountingApi } from '../api';
 import './AccountingManagement.css';
 
@@ -14,14 +9,14 @@ export default function AccountingManagement({ onBack }) {
 
   // Financial overview metrics
   const [overview, setOverview] = useState({
-    totalAssets: 12450000,
-    totalLiabilities: 3420000,
-    totalEquity: 9030000,
-    netProfit: 1850000,
-    cashBalance: 150000,
-    bankBalance: 4200000,
-    accountsReceivable: 1520000,
-    totalExpenses: 280000,
+    totalAssets: 0,
+    totalLiabilities: 0,
+    totalEquity: 0,
+    netProfit: 0,
+    cashBalance: 0,
+    bankBalance: 0,
+    accountsReceivable: 0,
+    totalExpenses: 0,
     journalEntries: []
   });
 
@@ -52,7 +47,7 @@ export default function AccountingManagement({ onBack }) {
     loadExpenses();
   }, []);
 
-  const loadOverview = async () => {
+  async function loadOverview() {
     setLoading(true);
     try {
       const data = await accountingApi.getFinancialOverview();
@@ -66,7 +61,7 @@ export default function AccountingManagement({ onBack }) {
     }
   };
 
-  const loadExpenses = async () => {
+  async function loadExpenses() {
     setLoadingExpenses(true);
     try {
       const data = await accountingApi.getExpenses();

@@ -119,6 +119,7 @@ router.post('/', protect, async (req, res) => {
   try {
     const {
       invoiceNumber,
+      customerId,
       customerName,
       customer,
       clientName,
@@ -131,20 +132,15 @@ router.post('/', protect, async (req, res) => {
       dueDate,
       type,
       items = [],
-      subtotal,
       discount = 0,
       discountType = 'fixed',
       discountAmount = 0,
-      totalTax = 0,
       cgstTotal = 0,
       sgstTotal = 0,
       igstTotal = 0,
       roundOff = 0,
-      grandTotal,
-      amount,
       paidAmount,
-      balanceAmount,
-      paymentStatus = 'Paid',
+      paymentStatus = 'Unpaid',
       status,
       paymentMethod = 'Cash',
       notes,
@@ -152,10 +148,7 @@ router.post('/', protect, async (req, res) => {
     } = req.body;
 
     const resolvedCustomer = customerName || customer || clientName || 'Cash Sale';
-    const resolvedGrandTotal = grandTotal !== undefined ? grandTotal : (amount || 0);
-    const resolvedStatus = status || paymentStatus || 'Paid';
-    const resolvedPaid = paidAmount !== undefined ? paidAmount : (resolvedStatus === 'Paid' ? resolvedGrandTotal : 0);
-    const resolvedBalance = balanceAmount !== undefined ? balanceAmount : (resolvedGrandTotal - resolvedPaid);
+    const resolvedStatus = status || paymentStatus || 'Unpaid';
 
     let finalInvoiceNumber = invoiceNumber;
     if (!finalInvoiceNumber) {
@@ -165,22 +158,28 @@ router.post('/', protect, async (req, res) => {
 
     // Format line items
     const parsedItems = items.map(it => {
-      const qty = parseFloat(it.qty) || 1;
-      const rate = parseFloat(it.rate || it.price) || 0;
-      const taxRate = parseFloat(it.taxRate || it.tax) || 0;
-      const itemTax = (qty * rate * taxRate) / 100;
-      const itemTotal = it.amount || it.total || ((qty * rate) + itemTax);
+      const qty = Number(it.qty ?? it.quantity ?? 1);
+      const rate = Number(it.rate ?? it.price ?? 0);
+      const taxRate = Number(it.taxRate ?? it.tax ?? 0);
+      const itemDiscount = Number(it.discount) || 0;
+      if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(rate) || rate < 0 || !Number.isFinite(taxRate) || taxRate < 0 || taxRate > 100) {
+        throw new Error('Each invoice item needs a valid quantity, price, and tax rate.');
+      }
+      if (itemDiscount < 0 || itemDiscount > qty * rate) throw new Error('An item discount cannot exceed its line value.');
+      const itemTaxable = qty * rate - itemDiscount;
+      const itemTax = (itemTaxable * taxRate) / 100;
+      const itemTotal = itemTaxable + itemTax;
 
       return {
         productId: it.productId || it._id,
         name: it.name || 'Custom Item',
         description: it.description || '',
         sku: it.sku || '',
-        hsnCode: it.hsnCode || '998311',
+        hsnCode: it.hsnCode || '',
         qty,
         unit: it.unit || 'Pcs',
         rate,
-        discount: parseFloat(it.discount) || 0,
+        discount: itemDiscount,
         taxRate,
         cgst: itemTax / 2,
         sgst: itemTax / 2,
@@ -189,8 +188,21 @@ router.post('/', protect, async (req, res) => {
       };
     });
 
+    const computedSubtotal = parsedItems.reduce((sum, item) => sum + item.qty * item.rate, 0);
+    const computedTax = parsedItems.reduce((sum, item) => sum + ((item.qty * item.rate - item.discount) * item.taxRate / 100), 0);
+    const rawDiscount = Number(discount) || 0;
+    const resolvedDiscountAmount = discountAmount !== undefined && Number(discountAmount) !== 0
+      ? Number(discountAmount)
+      : discountType === '%' ? computedSubtotal * rawDiscount / 100 : rawDiscount;
+    const computedGrandTotal = computedSubtotal + computedTax - resolvedDiscountAmount + (Number(roundOff) || 0);
+    const resolvedPaid = paidAmount !== undefined ? Number(paidAmount) : (resolvedStatus === 'Paid' ? computedGrandTotal : 0);
+    if (!Number.isFinite(computedGrandTotal) || computedGrandTotal <= 0) return res.status(400).json({ message: 'Invoice total must be greater than zero.' });
+    if (!Number.isFinite(resolvedDiscountAmount) || resolvedDiscountAmount < 0 || resolvedDiscountAmount > computedSubtotal + computedTax) return res.status(400).json({ message: 'Invoice discount must be within the invoice value.' });
+    if (!Number.isFinite(resolvedPaid) || resolvedPaid < 0 || resolvedPaid > computedGrandTotal) return res.status(400).json({ message: 'Paid amount must be between zero and the invoice total.' });
+
     const newInvoice = new Invoice({
       shopId: req.shopId,
+      customerId: customerId || undefined,
       invoiceNumber: finalInvoiceNumber,
       customerName: resolvedCustomer,
       customerPhone: customerPhone || '',
@@ -199,22 +211,22 @@ router.post('/', protect, async (req, res) => {
       billingAddress: billingAddress || '',
       shippingAddress: shippingAddress || '',
       date: date ? new Date(date) : new Date(),
-      dueDate: dueDate ? new Date(dueDate) : new Date(),
+      dueDate: dueDate ? new Date(dueDate) : new Date(Date.now() + 15 * 86400000),
       type: type || 'Tax Invoice',
       items: parsedItems,
-      subtotal: subtotal !== undefined ? subtotal : parsedItems.reduce((s, i) => s + (i.qty * i.rate), 0),
-      discount: parseFloat(discount) || 0,
+      subtotal: computedSubtotal,
+      discount: rawDiscount,
       discountType,
-      discountAmount: parseFloat(discountAmount) || 0,
-      totalTax: parseFloat(totalTax) || 0,
-      cgstTotal: parseFloat(cgstTotal) || 0,
-      sgstTotal: parseFloat(sgstTotal) || 0,
+      discountAmount: resolvedDiscountAmount,
+      totalTax: computedTax,
+      cgstTotal: Number(cgstTotal) || computedTax / 2,
+      sgstTotal: Number(sgstTotal) || computedTax / 2,
       igstTotal: parseFloat(igstTotal) || 0,
       roundOff: parseFloat(roundOff) || 0,
-      grandTotal: resolvedGrandTotal,
+      grandTotal: computedGrandTotal,
       paidAmount: resolvedPaid,
-      balanceAmount: resolvedBalance,
-      paymentStatus: resolvedStatus,
+      balanceAmount: Math.max(0, computedGrandTotal - resolvedPaid),
+      paymentStatus: ['Draft', 'Cancelled', 'Overdue'].includes(resolvedStatus) ? resolvedStatus : (resolvedPaid >= computedGrandTotal ? 'Paid' : resolvedPaid > 0 ? 'Partial' : 'Unpaid'),
       paymentMethod,
       notes: notes || 'Thank you for your business!',
       terms: terms || 'Goods once sold cannot be returned.'
@@ -247,6 +259,7 @@ router.post('/', protect, async (req, res) => {
     }
 
     // 2. Update customer balance if registered customer
+    const resolvedBalance = Math.max(0, computedGrandTotal - resolvedPaid);
     if (resolvedBalance > 0) {
       await Customer.findOneAndUpdate(
         { name: resolvedCustomer, shopId: req.shopId },
@@ -280,10 +293,12 @@ router.post('/', protect, async (req, res) => {
 // 5. Update invoice
 router.put('/:id', protect, async (req, res) => {
   try {
+    const changes = { ...req.body };
+    delete changes.shopId; delete changes._id; delete changes.createdAt; delete changes.updatedAt;
     const updated = await Invoice.findOneAndUpdate(
       { _id: req.params.id, shopId: req.shopId },
-      req.body,
-      { new: true }
+      changes,
+      { new: true, runValidators: true }
     );
     if (!updated) return res.status(404).json({ message: 'Invoice not found' });
     res.json(updated);
@@ -300,6 +315,8 @@ router.post('/:id/payments', protect, async (req, res) => {
     if (!invoice) return res.status(404).json({ message: 'Invoice not found' });
 
     const payAmt = parseFloat(amount) || 0;
+    if (!Number.isFinite(payAmt) || payAmt <= 0) return res.status(400).json({ message: 'Payment amount must be greater than zero.' });
+    if (payAmt > Math.max(0, (invoice.grandTotal || 0) - (invoice.paidAmount || 0))) return res.status(400).json({ message: 'Payment cannot exceed the invoice balance.' });
     const newPaid = (invoice.paidAmount || 0) + payAmt;
     const newBalance = Math.max(0, invoice.grandTotal - newPaid);
     const newStatus = newBalance === 0 ? 'Paid' : 'Partial';

@@ -1,9 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Percent, FileText, Download, Plus, Filter, Search, 
-  Settings, CheckCircle, AlertTriangle, ShieldCheck, PieChart,
-  Briefcase, RefreshCw, Loader2
-} from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Percent, FileText, Download, Plus, Settings, AlertTriangle, ShieldCheck, PieChart, Briefcase, RefreshCw } from 'lucide-react';
 import { taxApi } from '../api';
 import './TaxManagement.css';
 
@@ -52,7 +48,7 @@ export default function TaxManagement({ onBack }) {
     fetchTaxSummary();
   }, []);
 
-  const fetchTaxSummary = async () => {
+  async function fetchTaxSummary() {
     setLoading(true);
     try {
       const data = await taxApi.getSummary();

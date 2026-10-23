@@ -11,6 +11,51 @@
   margin: 1rem 0;
 }
 
+.subscription-checkout-page { width:min(1240px,100%); margin:1.25rem auto; padding:clamp(1rem,3vw,2.5rem); color:var(--text-main); }
+.subscription-back { border:1px solid var(--glass-border); border-radius:10px; padding:.65rem .9rem; color:var(--text-main); background:var(--glass-bg); cursor:pointer; }
+.subscription-heading { max-width:760px; margin:2.2rem auto 1.5rem; text-align:center; }
+.subscription-heading > span { display:inline-flex; align-items:center; gap:.45rem; color:#7657cf; font-size:.75rem; font-weight:800; letter-spacing:.13em; }
+.subscription-heading h1 { margin:.7rem 0; color:var(--text-main); font-size:clamp(2rem,4.7vw,3.5rem); line-height:1.04; letter-spacing:-.05em; }
+.subscription-heading p { margin:0 auto; max-width:630px; color:var(--text-secondary); line-height:1.65; }
+.subscription-login-note,.subscription-notice { display:flex; align-items:center; gap:.75rem; max-width:900px; margin:0 auto 1.25rem; padding:.9rem 1rem; border:1px solid var(--glass-border); border-radius:13px; background:var(--glass-bg); }
+.subscription-login-note > svg,.subscription-notice > svg { flex:0 0 auto; color:#7657cf; }
+.subscription-login-note span,.subscription-notice span { flex:1; color:var(--text-main); font-size:.9rem; }
+.subscription-login-note button,.subscription-notice button { display:inline-flex; align-items:center; gap:.35rem; border:0; color:#7657cf; background:transparent; font-weight:700; cursor:pointer; }
+.subscription-notice.error { border-color:rgba(220,70,85,.35); background:rgba(220,70,85,.07); }
+.subscription-notice.error > svg { color:#d54e5c; }
+.subscription-notice.success { border-color:rgba(20,160,115,.35); background:rgba(20,160,115,.07); }
+.subscription-notice.success > svg { color:#12966b; }
+.subscription-trial-status { display:flex; align-items:center; gap:.75rem; max-width:900px; margin:0 auto 1.25rem; padding:.9rem 1rem; border:1px solid rgba(20,160,115,.35); border-radius:13px; color:#128763; background:rgba(20,160,115,.07); }
+.subscription-trial-status span,.subscription-trial-status strong,.subscription-trial-status small { display:block; }
+.subscription-trial-status small { margin-top:.2rem; color:var(--text-secondary); }
+.subscription-trial-callout { display:flex; align-items:center; justify-content:space-between; gap:1.5rem; max-width:1120px; margin:2rem auto 1rem; padding:1.4rem 1.6rem; border:1px solid rgba(120,91,208,.22); border-radius:18px; background:linear-gradient(120deg,rgba(124,93,207,.1),rgba(71,177,190,.08)); }
+.subscription-trial-callout > div { max-width:650px; }
+.subscription-trial-callout > div > span { color:#7657cf; font-size:.68rem; font-weight:800; letter-spacing:.13em; }
+.subscription-trial-callout h2 { margin:.35rem 0; color:var(--text-main); font-size:1.3rem; }
+.subscription-trial-callout p { margin:0; color:var(--text-secondary); font-size:.85rem; line-height:1.5; }
+.subscription-trial-callout button { display:inline-flex; align-items:center; justify-content:center; gap:.5rem; min-width:220px; min-height:46px; padding:.7rem 1rem; border:0; border-radius:11px; color:white; font-weight:700; cursor:pointer; }
+.subscription-trial-callout button:disabled { opacity:.72; cursor:default; }
+.subscription-plan-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1.1rem; align-items:stretch; max-width:1120px; margin:1.5rem auto; }
+.subscription-plan-card { position:relative; display:flex; flex-direction:column; padding:1.5rem; border:1px solid var(--glass-border); border-radius:21px; background:var(--glass-bg); box-shadow:0 14px 42px rgba(36,25,67,.07); }
+.subscription-plan-card.popular { border-color:#8469dc; box-shadow:0 18px 52px rgba(101,72,190,.15); }
+.subscription-popular-tag { position:absolute; top:-12px; right:20px; padding:.32rem .65rem; border-radius:999px; color:white; background:linear-gradient(100deg,#7756d4,#9c67dc); font-size:.66rem; font-weight:800; letter-spacing:.08em; }
+.subscription-plan-icon { display:grid; place-items:center; width:44px; height:44px; border:1px solid rgba(124,93,207,.2); border-radius:14px; color:#785bd0; background:rgba(124,93,207,.08); }
+.subscription-plan-audience { min-height:2.3em; margin:1.2rem 0 .3rem; color:var(--text-secondary); font-size:.79rem; }
+.subscription-plan-card h2 { margin:.1rem 0; color:var(--text-main); font-size:1.5rem; }
+.subscription-plan-description { min-height:3.3em; margin:.45rem 0 .8rem; color:var(--text-secondary); font-size:.87rem; line-height:1.5; }
+.subscription-plan-price { margin:.4rem 0 1rem; color:var(--text-main); font-size:2rem; font-weight:800; letter-spacing:-.04em; }
+.subscription-plan-price small { color:var(--text-secondary); font-size:.84rem; font-weight:500; letter-spacing:0; }
+.subscription-plan-card ul { display:grid; gap:.7rem; padding:1rem 0 1.2rem; margin:0 0 1rem; border-top:1px solid var(--glass-border); list-style:none; }
+.subscription-plan-card li { display:flex; align-items:flex-start; gap:.55rem; color:var(--text-main); font-size:.84rem; line-height:1.45; }
+.subscription-plan-card li svg { flex:0 0 auto; color:#18a77c; margin-top:.08rem; }
+.subscription-plan-button { display:flex; align-items:center; justify-content:center; gap:.5rem; width:100%; min-height:46px; margin-top:auto; border:0; border-radius:11px; color:white; cursor:pointer; }
+.subscription-plan-button:disabled { opacity:.6; cursor:wait; }
+.subscription-checkout-footnote { display:flex; justify-content:center; align-items:center; gap:.45rem; margin:1.5rem auto; color:var(--text-secondary); font-size:.79rem; text-align:center; }
+.subscription-checkout-footnote svg { flex:0 0 auto; color:#7657cf; }
+@media(max-width:850px) { .subscription-plan-grid { grid-template-columns:1fr; max-width:540px; gap:1.25rem; } .subscription-plan-description,.subscription-plan-audience { min-height:0; } }
+@media(max-width:540px) { .subscription-checkout-page { padding:.75rem; } .subscription-heading { margin:1.6rem auto 1.2rem; } .subscription-heading h1 { font-size:2.1rem; } .subscription-plan-card { padding:1.2rem; } .subscription-login-note,.subscription-notice { align-items:flex-start; flex-wrap:wrap; } .subscription-checkout-footnote { align-items:flex-start; text-align:left; line-height:1.5; } }
+@media(max-width:700px) { .subscription-trial-callout { align-items:stretch; flex-direction:column; padding:1.2rem; } .subscription-trial-callout button { width:100%; } }
+
 .back-btn-absolute {
   position: absolute;
   top: 1.5rem;

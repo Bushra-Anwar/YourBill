@@ -1,7 +1,7 @@
 import express from 'express';
 import Quotation from '../models/Quotation.js';
 import Invoice from '../models/Invoice.js';
-import Product from '../models/Product.js';
+
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -84,7 +84,7 @@ router.post('/:id/convert-to-invoice', protect, async (req, res) => {
         name: it.name,
         qty: it.qty,
         rate: it.rate,
-        taxRate: it.taxRate || 18,
+        taxRate: it.taxRate ?? 0,
         amount: it.amount
       })),
       subtotal: quote.subtotal,

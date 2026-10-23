@@ -1,0 +1,55 @@
+services:
+  - type: pserv
+    name: yourbill-mongodb
+    runtime: image
+    plan: 0.5c-512mb
+    image:
+      url: docker.io/library/mongo:8.0
+    envVars:
+      - key: MONGO_INITDB_ROOT_USERNAME
+        value: yourbill
+      - key: MONGO_INITDB_ROOT_PASSWORD
+        generateValue: true
+    disk:
+      name: mongo-data
+      mountPath: /data/db
+      sizeGB: 10
+
+  - type: web
+    name: yourbill-api
+    runtime: node
+    rootDir: backend
+    plan: 0.5c-512mb
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_HOST
+        fromService:
+          name: yourbill-mongodb
+          type: pserv
+          property: host
+      - key: MONGODB_USER
+        fromService:
+          name: yourbill-mongodb
+          type: pserv
+          envVarKey: MONGO_INITDB_ROOT_USERNAME
+      - key: MONGODB_PASSWORD
+        fromService:
+          name: yourbill-mongodb
+          type: pserv
+          envVarKey: MONGO_INITDB_ROOT_PASSWORD
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: admin@gmail.com
+      - key: ADMIN_BOOTSTRAP_SECRET
+        generateValue: true
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false

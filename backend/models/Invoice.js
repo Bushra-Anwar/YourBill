@@ -5,12 +5,12 @@ const invoiceItemSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: { type: String, default: '' },
   sku: { type: String, default: '' },
-  hsnCode: { type: String, default: '998311' },
+  hsnCode: { type: String, default: '' },
   qty: { type: Number, required: true, default: 1 },
   unit: { type: String, default: 'Pcs' },
   rate: { type: Number, required: true, default: 0 },
   discount: { type: Number, default: 0 },
-  taxRate: { type: Number, default: 18 },
+  taxRate: { type: Number, default: 0 },
   cgst: { type: Number, default: 0 },
   sgst: { type: Number, default: 0 },
   igst: { type: Number, default: 0 },
@@ -49,7 +49,7 @@ const invoiceSchema = new mongoose.Schema({
   balanceAmount: { type: Number, default: 0 },
   paymentStatus: { 
     type: String, 
-    enum: ['Paid', 'Partial', 'Unpaid', 'Overdue', 'Draft', 'Cancelled'], 
+    enum: ['Paid', 'Partial', 'Unpaid', 'Overdue', 'Draft', 'Cancelled'],
     default: 'Unpaid' 
   },
   paymentMethod: { 

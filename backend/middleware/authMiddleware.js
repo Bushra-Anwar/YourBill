@@ -1,72 +1,8 @@
 import jwt from 'jsonwebtoken';
 import Shop from '../models/Shop.js';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_jwt_key_123';
-
-// Cache the default shop ID to minimize DB queries
-let cachedDefaultShopId = null;
-
-export const getDefaultShop = async () => {
-  if (cachedDefaultShopId) {
-    const shop = await Shop.findById(cachedDefaultShopId);
-    if (shop) return shop;
-  }
-
-  let defaultShop = await Shop.findOne({ email: 'admin@yourbill.com' });
-  if (!defaultShop) {
-    defaultShop = await Shop.findOne({});
-  }
-
-  if (!defaultShop) {
-    defaultShop = await Shop.create({
-      firstName: 'Admin',
-      lastName: 'Nexus',
-      companyName: 'Nexus Business Solutions Pvt Ltd',
-      email: 'admin@yourbill.com',
-      password: '$2a$10$abcdefghijklmnopqrstuvwxyz1234567890', // placeholder hashed
-      phone: '+91 98765 43210',
-      gstin: '27AABCU9603R1ZX',
-      address: '101, Tech Park, Corporate Boulevard',
-      city: 'Mumbai',
-      state: 'Maharashtra',
-      pincode: '400001',
-      subscriptionStatus: 'active',
-      plan: 'Enterprise Pro'
-    });
-  }
-
-  cachedDefaultShopId = defaultShop._id;
-  return defaultShop;
-};
+import { JWT_SECRET } from '../config.js';
 
 // Resilient auth middleware: attaches shopId whether authenticated or working in workspace demo session
-export const protect = async (req, res, next) => {
-  let token;
-
-  if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
-    try {
-      token = req.headers.authorization.split(' ')[1];
-      if (token && token !== 'null' && token !== 'undefined') {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        req.shopId = decoded.id;
-        return next();
-      }
-    } catch (error) {
-      console.warn('Token verification failed, falling back to default shop context:', error.message);
-    }
-  }
-
-  try {
-    const defaultShop = await getDefaultShop();
-    req.shopId = defaultShop._id;
-    req.shop = defaultShop;
-    next();
-  } catch (error) {
-    console.error('Error in protect middleware fallback:', error);
-    res.status(500).json({ message: 'Authentication workspace initialization failed' });
-  }
-};
-
 export const strictProtect = async (req, res, next) => {
   let token;
 
@@ -76,10 +12,39 @@ export const strictProtect = async (req, res, next) => {
       const decoded = jwt.verify(token, JWT_SECRET);
       req.shopId = decoded.id;
       return next();
-    } catch (error) {
+    } catch {
       return res.status(401).json({ message: 'Not authorized, token failed' });
     }
   }
 
   return res.status(401).json({ message: 'Not authorized, token required' });
+};
+
+// Business data must always be scoped to the authenticated account.
+export const protect = strictProtect;
+
+const planRanks = { starter: 1, professional: 2, enterprise: 3, 'enterprise pro': 3 };
+export const requirePlan = minimumPlan => async (req, res, next) => {
+  try {
+    const shop = await Shop.findById(req.shopId).select('email role plan subscriptionStatus trialEndsAt subscriptionEndsAt');
+    if (!shop) return res.status(401).json({ message: 'Account not found.' });
+    if (shop.role === 'Admin') return next();
+    const rank = planRanks[String(shop.plan || '').toLowerCase()] || 1;
+    const minimumRank = planRanks[String(minimumPlan || '').toLowerCase()] || 1;
+    if (shop.subscriptionStatus === 'trial' && shop.trialEndsAt && shop.trialEndsAt <= new Date()) {
+      shop.subscriptionStatus = 'expired';
+      await shop.save();
+    } else if (shop.subscriptionStatus === 'active' && shop.subscriptionEndsAt && shop.subscriptionEndsAt <= new Date()) {
+      shop.subscriptionStatus = 'expired';
+      await shop.save();
+    }
+    if (shop.subscriptionStatus === 'expired' || shop.subscriptionStatus === 'pending') {
+      return res.status(402).json({ message: 'Your subscription has expired. Choose a plan to continue.' });
+    }
+    if (rank < minimumRank) return res.status(403).json({ message: `This feature requires the ${minimumPlan} plan.` });
+    req.shop = shop;
+    next();
+  } catch {
+    res.status(500).json({ message: 'Could not verify your subscription.' });
+  }
 };

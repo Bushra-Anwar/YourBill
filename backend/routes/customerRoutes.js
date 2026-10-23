@@ -40,7 +40,10 @@ router.post('/', protect, async (req, res) => {
 // Update a customer
 router.put('/:id', protect, async (req, res) => {
   try {
-    const updatedCustomer = await Customer.findOneAndUpdate({ _id: req.params.id, shopId: req.shopId }, req.body, { new: true });
+    const changes = { ...req.body };
+    delete changes.shopId; delete changes._id; delete changes.createdAt; delete changes.updatedAt;
+    const updatedCustomer = await Customer.findOneAndUpdate({ _id: req.params.id, shopId: req.shopId }, changes, { new: true, runValidators: true });
+    if (!updatedCustomer) return res.status(404).json({ message: 'Customer not found.' });
     res.json(updatedCustomer);
   } catch (error) {
     res.status(400).json({ message: error.message });

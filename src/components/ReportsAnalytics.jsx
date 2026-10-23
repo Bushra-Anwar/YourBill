@@ -1,16 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import {
-  BarChart2, PieChart, TrendingUp, Calendar,
-  DollarSign, Users, ShoppingBag, MapPin,
-  Download, FileText, FileSpreadsheet, Mail, Share2, Target, Percent,
-  RefreshCw, Loader2
-} from 'lucide-react';
-import { invoiceApi, productApi, customerApi } from '../api';
+import { useState, useEffect } from 'react';
+import { TrendingUp, Calendar, DollarSign, FileText, FileSpreadsheet, Mail, Target, Percent, RefreshCw } from 'lucide-react';
+import { invoiceApi } from '../api';
 import './ReportsAnalytics.css';
 
 export default function ReportsAnalytics({ onBack }) {
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [salesView, setSalesView] = useState('monthly'); // daily, weekly, monthly, yearly
   const [loading, setLoading] = useState(false);
 
   // Live analytics state
@@ -31,20 +25,32 @@ export default function ReportsAnalytics({ onBack }) {
     loadAnalytics();
   }, []);
 
-  const loadAnalytics = async () => {
+  async function loadAnalytics() {
     setLoading(true);
     try {
-      const [summaryData, invList] = await Promise.all([
-        invoiceApi.getStatsSummary().catch(() => null),
-        invoiceApi.getAll().catch(() => [])
-      ]);
-
-      if (summaryData) {
-        setStats(summaryData);
-      }
+      const invList = await invoiceApi.getAll().catch(() => []);
 
       if (Array.isArray(invList)) {
         setInvoices(invList);
+        const today = new Date();
+        const isSameDay = (value) => {
+          const date = new Date(value);
+          return !Number.isNaN(date.getTime()) && date.toDateString() === today.toDateString();
+        };
+        const isSameMonth = (value) => {
+          const date = new Date(value);
+          return !Number.isNaN(date.getTime()) && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+        };
+        const amountOf = (inv) => Number(inv.totalAmount ?? inv.grandTotal ?? inv.amount ?? 0) || 0;
+        const paidOf = (inv) => Number(inv.paidAmount ?? ((inv.paymentStatus || inv.status) === 'Paid' ? amountOf(inv) : 0)) || 0;
+        setStats({
+          totalSales: invList.reduce((sum, inv) => sum + amountOf(inv), 0),
+          paidSales: invList.reduce((sum, inv) => sum + paidOf(inv), 0),
+          outstanding: invList.reduce((sum, inv) => sum + Math.max(0, Number(inv.balanceAmount ?? amountOf(inv) - paidOf(inv)) || 0), 0),
+          todaySales: invList.filter(inv => isSameDay(inv.date || inv.createdAt)).reduce((sum, inv) => sum + amountOf(inv), 0),
+          monthSales: invList.filter(inv => isSameMonth(inv.date || inv.createdAt)).reduce((sum, inv) => sum + amountOf(inv), 0),
+          invoiceCount: invList.length
+        });
 
         // Aggregate top products
         const prodMap = {};
@@ -111,107 +117,82 @@ export default function ReportsAnalytics({ onBack }) {
     <div className="export-group">
       <button className="export-btn" title="Export as PDF" onClick={() => window.print()}><FileText size={16} /> Print PDF</button>
       <button className="export-btn" title="Export as CSV" onClick={handleExportCSV}><FileSpreadsheet size={16} /> CSV</button>
-      <button className="export-btn" title="Email Report" onClick={() => alert('Executive analytics report emailed to admin account!')}><Mail size={16} /></button>
+      <button className="export-btn" title="Create an email draft with the current report totals" onClick={() => {
+        const body = [`Sales report`, `Invoices: ${stats.invoiceCount}`, `Total sales: ${stats.totalSales}`, `Paid sales: ${stats.paidSales}`, `Outstanding: ${stats.outstanding}`].join('\\n');
+        window.location.href = `mailto:?subject=${encodeURIComponent('YourBill sales report')}&body=${encodeURIComponent(body)}`;
+      }}><Mail size={16} /></button>
     </div>
   );
 
-  const renderDashboard = () => (
-    <div className="ra-view fade-in">
-      <div className="ra-header">
-        <div>
-          <button className="back-btn" onClick={onBack}>← Back to Dashboard</button>
-          <h2 className="ra-title">Executive Analytics & KPI Dashboard</h2>
-          <p className="ra-subtitle">Live real-time revenue performance, conversion margins, and receivables</p>
-        </div>
-        <div style={{display:'flex', gap:'0.8rem', alignItems:'center'}}>
-          <button className="btn-secondary" onClick={loadAnalytics} disabled={loading} style={{display:'flex', alignItems:'center', gap:'0.4rem'}}>
-            <RefreshCw size={16} className={loading ? 'spin' : ''}/> Refresh
-          </button>
-          {renderExportActions()}
-        </div>
-      </div>
+  const renderDashboard = () => {
+    const monthlySales = Array.from({ length: 5 }, (_, index) => {
+      const date = new Date();
+      date.setDate(1);
+      date.setMonth(date.getMonth() - (4 - index));
+      const sales = invoices.reduce((sum, inv) => {
+        const invoiceDate = new Date(inv.date || inv.createdAt);
+        return invoiceDate.getMonth() === date.getMonth() && invoiceDate.getFullYear() === date.getFullYear()
+          ? sum + (Number(inv.totalAmount ?? inv.grandTotal ?? inv.amount ?? 0) || 0)
+          : sum;
+      }, 0);
+      return { label: date.toLocaleDateString('en-IN', { month: 'short' }), sales, current: index === 4 };
+    });
+    const peakSales = Math.max(...monthlySales.map(month => month.sales), 1);
+    const latestMonth = monthlySales[4].sales;
+    const previousMonth = monthlySales[3].sales;
+    const monthlyChange = previousMonth > 0 ? ((latestMonth - previousMonth) / previousMonth) * 100 : null;
 
-      <div className="grid-4">
-        <div className="metric-card highlight">
-          <div className="metric-icon bg-purple"><DollarSign size={24} /></div>
-          <div className="metric-info">
-            <h4>Today's Sales</h4>
-            <div className="metric-value">₹{(stats.todaySales || 0).toLocaleString('en-IN')}</div>
-            <div className="metric-trend positive">From live invoice logs</div>
+    return (
+      <div className="ra-view fade-in">
+        <header className="ra-header">
+          <div className="ra-heading-copy">
+            <button className="back-btn" onClick={onBack}>← Back to Dashboard</button>
+            <p className="eyebrow">BUSINESS OVERVIEW</p>
+            <h2 className="ra-title">Analytics</h2>
+            <p className="ra-subtitle">Your billing and collection performance, all in one place.</p>
           </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-icon bg-blue"><Calendar size={24} /></div>
-          <div className="metric-info">
-            <h4>Total Revenue Billed</h4>
-            <div className="metric-value">₹{(stats.totalSales || 0).toLocaleString('en-IN')}</div>
-            <div className="metric-trend positive">{stats.invoiceCount || invoices.length} total orders</div>
+          <div className="ra-actions">
+            <button className="btn-secondary" onClick={loadAnalytics} disabled={loading}><RefreshCw size={16} className={loading ? 'spin' : ''}/> Refresh</button>
+            {renderExportActions()}
           </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-icon bg-green"><TrendingUp size={24} /></div>
-          <div className="metric-info">
-            <h4>Paid & Realized Collections</h4>
-            <div className="metric-value text-green">₹{(stats.paidSales || 0).toLocaleString('en-IN')}</div>
-            <div className="metric-trend positive">Bank & Cash credited</div>
-          </div>
-        </div>
-        <div className="metric-card">
-          <div className="metric-icon bg-orange"><Target size={24} /></div>
-          <div className="metric-info">
-            <h4>Pending Receivables</h4>
-            <div className="metric-value text-orange">₹{(stats.outstanding || 0).toLocaleString('en-IN')}</div>
-            <div className="metric-trend negative">Unsettled balances</div>
-          </div>
-        </div>
-      </div>
+        </header>
 
-      <div className="grid-2">
-        <div className="ra-section">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3>Revenue Growth Trajectory</h3>
-            <span className="growth-badge positive">↑ 18.5% QoQ</span>
-          </div>
-          <div className="chart-placeholder" style={{display:'flex', alignItems:'flex-end', justifyContent:'space-around', height:'200px', padding:'1rem 0', borderBottom:'1px solid var(--border-color)'}}>
-            <div className="chart-bar" style={{ height: '45%', width:'35px', background:'var(--border-color)', borderRadius:'4px' }} title="Nov"></div>
-            <div className="chart-bar" style={{ height: '60%', width:'35px', background:'var(--border-color)', borderRadius:'4px' }} title="Dec"></div>
-            <div className="chart-bar" style={{ height: '55%', width:'35px', background:'var(--border-color)', borderRadius:'4px' }} title="Jan"></div>
-            <div className="chart-bar" style={{ height: '75%', width:'35px', background:'var(--border-color)', borderRadius:'4px' }} title="Feb"></div>
-            <div className="chart-bar" style={{ height: '90%', width:'35px', background:'linear-gradient(180deg, #8b5cf6, #3b82f6)', borderRadius:'4px' }} title="Mar (Current)"></div>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-around', marginTop: '0.8rem', color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
-            <span>Nov</span><span>Dec</span><span>Jan</span><span>Feb</span><span style={{fontWeight:'bold', color:'var(--text-primary)'}}>Mar 2026</span>
-          </div>
+        <div className="grid-4 analytics-kpis">
+          <div className="metric-card highlight"><div className="metric-icon bg-purple"><DollarSign size={22}/></div><div className="metric-info"><h4>Today's sales</h4><div className="metric-value">₹{stats.todaySales.toLocaleString('en-IN')}</div><div className="metric-trend">Today's invoices</div></div></div>
+          <div className="metric-card"><div className="metric-icon bg-blue"><Calendar size={22}/></div><div className="metric-info"><h4>Total billed</h4><div className="metric-value">₹{stats.totalSales.toLocaleString('en-IN')}</div><div className="metric-trend">{invoices.length} invoices</div></div></div>
+          <div className="metric-card"><div className="metric-icon bg-green"><TrendingUp size={22}/></div><div className="metric-info"><h4>Collected</h4><div className="metric-value text-green">₹{stats.paidSales.toLocaleString('en-IN')}</div><div className="metric-trend">Payments received</div></div></div>
+          <div className="metric-card"><div className="metric-icon bg-orange"><Target size={22}/></div><div className="metric-info"><h4>Outstanding</h4><div className="metric-value text-orange">₹{stats.outstanding.toLocaleString('en-IN')}</div><div className="metric-trend">Balance to collect</div></div></div>
         </div>
 
-        <div className="ra-section">
-          <h3>Real-Time Operational Pulse</h3>
-          <div className="grid-2" style={{ marginTop: '1.5rem' }}>
-            <div style={{ background: 'var(--bg-color)', padding: '1.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
-              <h4 style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Total Invoices</h4>
-              <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{invoices.length}</div>
-              <div style={{ fontSize: '0.85rem', color: '#10b981', marginTop: '0.25rem' }}>Active billing count</div>
+        <div className="analytics-grid">
+          <section className="ra-section revenue-panel">
+            <div className="chart-heading"><div><h3>Revenue over time</h3><p>Monthly totals from your invoices</p></div>{monthlyChange !== null && <span className={`growth-badge ${monthlyChange >= 0 ? 'positive' : 'negative'}`}>{monthlyChange >= 0 ? '↑' : '↓'} {Math.abs(monthlyChange).toFixed(1)}% MoM</span>}</div>
+            <div className={`chart-placeholder ${invoices.length === 0 ? 'is-empty' : ''}`} role="img" aria-label="Invoice revenue for the last five months">
+              {invoices.length > 0 ? monthlySales.map(month => <div key={month.label} className={`chart-column ${month.current ? 'current' : ''}`}><span className="chart-amount">₹{month.sales.toLocaleString('en-IN')}</span><div className="chart-bar" style={{ height: `${Math.max(month.sales > 0 ? 8 : 2, month.sales / peakSales * 100)}%` }}/><span className="chart-label">{month.label}</span></div>) : <div className="chart-empty"><span>↗</span><strong>No sales history yet</strong><small>Create an invoice to see your monthly revenue here.</small></div>}
             </div>
-            <div style={{ background: 'var(--bg-color)', padding: '1.2rem', borderRadius: '10px', border: '1px solid var(--border-color)' }}>
-              <h4 style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Paid Invoices</h4>
-              <div style={{ fontSize: '2rem', fontWeight: 'bold', color:'#10b981' }}>
-                {invoices.filter(i => i.paymentStatus === 'Paid').length}
-              </div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '0.25rem' }}>
-                {invoices.filter(i => i.paymentStatus !== 'Paid').length} pending
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+          </section>
 
+          <section className="ra-section pulse-panel">
+            <div className="panel-heading"><div><h3>Business at a glance</h3><p>Invoice activity and collections</p></div><span className="live-dot">Live</span></div>
+            <div className="pulse-metrics"><div className="pulse-metric"><span>Total invoices</span><strong>{invoices.length}</strong><small>All recorded invoices</small></div><div className="pulse-metric"><span>Paid invoices</span><strong className="paid-number">{invoices.filter(i => (i.paymentStatus || i.status) === 'Paid').length}</strong><small>{invoices.filter(i => (i.paymentStatus || i.status) !== 'Paid').length} still open</small></div></div>
+            <div className="pulse-summary"><div><span>Collected so far</span><strong>₹{stats.paidSales.toLocaleString('en-IN')}</strong></div><div><span>This month billed</span><strong>₹{stats.monthSales.toLocaleString('en-IN')}</strong></div></div>
+          </section>
+        </div>
+
+        <section className="ra-section recent-invoices">
+          <div className="panel-heading"><div><h3>Recent invoices</h3><p>A quick look at your latest billing activity.</p></div><button className="text-action" onClick={() => setActiveTab('sales')}>View all invoices <span>→</span></button></div>
+          <div className="recent-invoice-list">
+            {invoices.length > 0 ? invoices.slice(0, 5).map(inv => <div className="recent-invoice-row" key={inv._id || inv.invoiceNumber}><div className="invoice-avatar"><FileText size={17}/></div><div className="recent-invoice-name"><strong>{inv.customerName || 'Customer'}</strong><span>{inv.invoiceNumber || 'Invoice'} · {new Date(inv.date || inv.createdAt).toLocaleDateString('en-IN')}</span></div><span className={`invoice-status ${(inv.paymentStatus || inv.status || 'Unpaid').toLowerCase()}`}>{inv.paymentStatus || inv.status || 'Unpaid'}</span><strong className="recent-invoice-amount">₹{Number(inv.totalAmount ?? inv.grandTotal ?? inv.amount ?? 0).toLocaleString('en-IN')}</strong></div>) : <div className="recent-empty"><span>🧾</span><div><strong>No invoices yet</strong><p>Your latest invoices will show up here.</p></div></div>}
+          </div>
+        </section>
+      </div>
+    );
+  };
   const renderSalesReports = () => (
     <div className="ra-view fade-in">
       <div className="ra-header">
         <div>
-          <button className="back-btn" onClick={() => setActiveTab('dashboard')}>← Back to Overview</button>
+          <button className="back-btn" onClick={() => setActiveTab('dashboard')}>â† Back to Overview</button>
           <h2 className="ra-title">Sales Reports & Invoicing Register</h2>
           <p className="ra-subtitle">Complete ledger of all generated customer invoices</p>
         </div>
@@ -238,9 +219,9 @@ export default function ReportsAnalytics({ onBack }) {
                   <td><strong>#{inv.invoiceNumber}</strong></td>
                   <td>{new Date(inv.date).toLocaleDateString()}</td>
                   <td>{inv.customerName}</td>
-                  <td>₹{(inv.subtotal || 0).toLocaleString('en-IN')}</td>
-                  <td>₹{(inv.totalTax || 0).toLocaleString('en-IN')}</td>
-                  <td><strong>₹{(inv.grandTotal || 0).toLocaleString('en-IN')}</strong></td>
+                  <td>â‚¹{(inv.subtotal || 0).toLocaleString('en-IN')}</td>
+                  <td>â‚¹{(inv.totalTax || 0).toLocaleString('en-IN')}</td>
+                  <td><strong>â‚¹{(inv.grandTotal || 0).toLocaleString('en-IN')}</strong></td>
                   <td>
                     <span className={`status-badge ${(inv.paymentStatus || 'Paid').toLowerCase()}`}>
                       {inv.paymentStatus || 'Paid'}
@@ -263,7 +244,7 @@ export default function ReportsAnalytics({ onBack }) {
     <div className="ra-view fade-in">
       <div className="ra-header">
         <div>
-          <button className="back-btn" onClick={() => setActiveTab('dashboard')}>← Back to Overview</button>
+          <button className="back-btn" onClick={() => setActiveTab('dashboard')}>â† Back to Overview</button>
           <h2 className="ra-title">Product & Item Performance</h2>
           <p className="ra-subtitle">Volume and sales breakdown by catalog item</p>
         </div>
@@ -286,7 +267,7 @@ export default function ReportsAnalytics({ onBack }) {
                 <tr key={idx}>
                   <td><strong>{p.name}</strong></td>
                   <td>{p.qty}</td>
-                  <td><strong style={{color:'#10b981'}}>₹{Math.round(p.revenue).toLocaleString('en-IN')}</strong></td>
+                  <td><strong style={{color:'#10b981'}}>â‚¹{Math.round(p.revenue).toLocaleString('en-IN')}</strong></td>
                 </tr>
               ))
             ) : (
@@ -304,7 +285,7 @@ export default function ReportsAnalytics({ onBack }) {
     <div className="ra-view fade-in">
       <div className="ra-header">
         <div>
-          <button className="back-btn" onClick={() => setActiveTab('dashboard')}>← Back to Overview</button>
+          <button className="back-btn" onClick={() => setActiveTab('dashboard')}>â† Back to Overview</button>
           <h2 className="ra-title">Customer Analytics</h2>
           <p className="ra-subtitle">Lifetime orders, billed volume, and outstanding balances</p>
         </div>
@@ -328,9 +309,9 @@ export default function ReportsAnalytics({ onBack }) {
                 <tr key={idx}>
                   <td><strong>{c.name}</strong></td>
                   <td>{c.orders}</td>
-                  <td><strong>₹{c.revenue.toLocaleString('en-IN')}</strong></td>
+                  <td><strong>â‚¹{c.revenue.toLocaleString('en-IN')}</strong></td>
                   <td style={{ color: c.outstanding > 0 ? '#ef4444' : '#10b981' }}>
-                    ₹{c.outstanding.toLocaleString('en-IN')}
+                    â‚¹{c.outstanding.toLocaleString('en-IN')}
                   </td>
                 </tr>
               ))
@@ -356,7 +337,7 @@ export default function ReportsAnalytics({ onBack }) {
       <div className="ra-view fade-in">
         <div className="ra-header">
           <div>
-            <button className="back-btn" onClick={() => setActiveTab('dashboard')}>← Back to Overview</button>
+            <button className="back-btn" onClick={() => setActiveTab('dashboard')}>â† Back to Overview</button>
             <h2 className="ra-title">Tax & Profitability Breakdown</h2>
             <p className="ra-subtitle">Operating income, margins, and tax contribution</p>
           </div>
@@ -369,23 +350,23 @@ export default function ReportsAnalytics({ onBack }) {
             <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.1rem' }}>
                 <span>Total Billed Sales</span>
-                <strong>₹{totalRev.toLocaleString('en-IN')}</strong>
+                <strong>â‚¹{totalRev.toLocaleString('en-IN')}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
                 <span>(-) Estimated COGS (Cost of Inventory ~60%)</span>
-                <span>₹{estCogs.toLocaleString('en-IN')}</span>
+                <span>â‚¹{estCogs.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.2rem', padding: '1rem 0', borderTop: '1px dashed var(--border-color)', borderBottom: '1px dashed var(--border-color)' }}>
                 <span>Gross Profit</span>
-                <strong style={{ color: '#10b981' }}>₹{grossProfit.toLocaleString('en-IN')}</strong>
+                <strong style={{ color: '#10b981' }}>â‚¹{grossProfit.toLocaleString('en-IN')}</strong>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
                 <span>(-) Operating Expenses (~15%)</span>
-                <span>₹{estExpenses.toLocaleString('en-IN')}</span>
+                <span>â‚¹{estExpenses.toLocaleString('en-IN')}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.3rem', paddingTop: '1rem', borderTop: '2px solid var(--border-color)' }}>
                 <span>Net Operating Profit</span>
-                <strong style={{ color: '#10b981' }}>₹{netProfit.toLocaleString('en-IN')}</strong>
+                <strong style={{ color: '#10b981' }}>â‚¹{netProfit.toLocaleString('en-IN')}</strong>
               </div>
             </div>
           </div>

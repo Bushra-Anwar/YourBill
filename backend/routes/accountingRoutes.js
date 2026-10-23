@@ -16,11 +16,7 @@ router.get('/financial-overview', protect, async (req, res) => {
     const payments = await Payment.find({ shopId: req.shopId });
 
     // Inventory Valuation
-    const inventoryValuation = products.reduce((sum, p) => {
-      const qty = p.stock || 0;
-      const cost = p.costPrice || (p.price * 0.7);
-      return sum + (qty * cost);
-    }, 0);
+    const inventoryValuation = products.reduce((sum, product) => sum + (Number(product.stock) || 0) * (Number(product.costPrice) || 0), 0);
 
     // Receivables (Unpaid & Overdue balance)
     const accountsReceivable = invoices.reduce((sum, inv) => sum + (inv.balanceAmount || 0), 0);
@@ -32,17 +28,24 @@ router.get('/financial-overview', protect, async (req, res) => {
     // Total Expenses
     const totalExpenses = expenses.reduce((sum, e) => sum + (e.amount || 0), 0);
 
-    // Estimated COGS (Cost of goods sold: ~60% of product sales)
-    const estimatedCOGS = totalBilled * 0.6;
+    const productCosts = new Map(products.map(product => [String(product._id), Number(product.costPrice) || 0]));
+    const actualCOGS = invoices.reduce((invoiceSum, invoice) => invoiceSum + (invoice.items || []).reduce((itemSum, item) => {
+      const cost = productCosts.get(String(item.productId || ''));
+      return itemSum + (cost === undefined ? 0 : cost * (Number(item.qty ?? item.quantity) || 0));
+    }, 0), 0);
 
     // Net Profit
-    const netProfit = Math.max(0, totalBilled - totalExpenses - estimatedCOGS);
+    const grossProfit = totalBilled - actualCOGS;
+    const netProfit = grossProfit - totalExpenses;
 
     // Cash and Bank balance
     const cashReceived = payments.filter(p => p.paymentMethod === 'Cash').reduce((s, p) => s + p.amount, 0);
     const bankReceived = totalCashBankReceived - cashReceived;
-    const cashBalance = Math.max(50000, cashReceived - (totalExpenses * 0.2));
-    const bankBalance = Math.max(150000, bankReceived - (totalExpenses * 0.8));
+    const paidExpenses = expenses.filter(expense => String(expense.status || 'Paid').toLowerCase() === 'paid');
+    const cashExpense = paidExpenses.filter(expense => String(expense.paymentMethod).toLowerCase() === 'cash').reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
+    const bankExpense = paidExpenses.filter(expense => String(expense.paymentMethod).toLowerCase() !== 'cash').reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
+    const cashBalance = cashReceived - cashExpense;
+    const bankBalance = bankReceived - bankExpense;
 
     // Total Assets = Cash + Bank + Accounts Receivable + Inventory
     const totalAssets = cashBalance + bankBalance + accountsReceivable + inventoryValuation;
@@ -51,7 +54,8 @@ router.get('/financial-overview', protect, async (req, res) => {
     const outputTax = invoices.reduce((sum, inv) => sum + (inv.totalTax || 0), 0);
     const inputTaxCredit = expenses.reduce((sum, e) => sum + (e.taxAmount || 0), 0);
     const netGstPayable = Math.max(0, outputTax - inputTaxCredit);
-    const totalLiabilities = netGstPayable + 85000; // estimated payables
+    const unpaidExpensePayables = expenses.filter(expense => String(expense.status || '').toLowerCase() !== 'paid').reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
+    const totalLiabilities = netGstPayable + unpaidExpensePayables;
 
     // Equity = Assets - Liabilities
     const totalEquity = totalAssets - totalLiabilities;
@@ -60,7 +64,7 @@ router.get('/financial-overview', protect, async (req, res) => {
     const journalEntries = [
       ...invoices.slice(0, 4).map(inv => ({
         id: `JE-INV-${inv._id.toString().substring(18)}`,
-        date: inv.date ? new Date(inv.date).toISOString().split('T')[0] : '2026-03-01',
+        date: inv.date ? new Date(inv.date).toISOString().split('T')[0] : '',
         description: `Sales Invoice #${inv.invoiceNumber} to ${inv.customerName}`,
         debitAccount: inv.paymentStatus === 'Paid' ? 'Cash / Bank A/c' : 'Accounts Receivable A/c',
         creditAccount: 'Sales Revenue A/c',
@@ -69,7 +73,7 @@ router.get('/financial-overview', protect, async (req, res) => {
       })),
       ...expenses.slice(0, 3).map(exp => ({
         id: `JE-EXP-${exp._id.toString().substring(18)}`,
-        date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : '2026-03-05',
+        date: exp.date ? new Date(exp.date).toISOString().split('T')[0] : '',
         description: `${exp.category} Expense paid to ${exp.vendor}`,
         debitAccount: `${exp.category} Expense A/c`,
         creditAccount: 'Bank A/c',
@@ -83,6 +87,7 @@ router.get('/financial-overview', protect, async (req, res) => {
       totalLiabilities,
       totalEquity,
       netProfit,
+      grossProfit,
       cashBalance,
       bankBalance,
       inventoryValuation,
