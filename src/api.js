@@ -356,95 +356,6 @@ export const taxApi = {
   }
 };
 
-// ============================================================
-// AUTH API (MongoDB-backed accounts)
-// ============================================================
-const AUTH_API_BASE = API_BASE;
-const requestAuth = async (path, options = {}) => {
-  const response = await fetch(`${AUTH_API_BASE}/auth${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) }
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.message || 'Could not connect to your account. Please try again.');
-  return data;
-};
-const normalizeShop = shop => ({
-  ...shop,
-  _id: shop._id || shop.id,
-  name: shop.name || [shop.firstName, shop.lastName].filter(Boolean).join(' '),
-  role: shop.role || 'Client'
-});
-export const authApi = {
-  login: async ({ email, password }) => {
-    const data = await requestAuth('/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-    return { token: data.token, user: normalizeShop(data.shop) };
-  },
-  register: async ({ name, ...data }) => {
-    const [firstName, ...lastParts] = (name || '').trim().split(/\s+/);
-    const result = await requestAuth('/register', {
-      method: 'POST',
-      body: JSON.stringify({ ...data, firstName, lastName: lastParts.join(' ') })
-    });
-    return { token: result.token, user: normalizeShop(result.shop) };
-  },
-  startTrial: async () => {
-    const updated = normalizeShop(await requestAuth('/trial', { method: 'POST' }));
-    localStorage.setItem('currentUser', JSON.stringify(updated));
-    return updated;
-  },
-  updateSubscription: async (subscription) => {
-    const current = JSON.parse(localStorage.getItem('currentUser') || 'null');
-    if (!current) throw new Error('Log in to update your subscription.');
-    const updated = { ...current, ...subscription };
-    const users = DB.get('users');
-    const index = users.findIndex(item => item._id === current._id || item.email === current.email);
-    if (index >= 0) users[index] = { ...users[index], ...subscription };
-    DB.set('users', users);
-    localStorage.setItem('currentUser', JSON.stringify(updated));
-    return updated;
-  },
-  getMe: async () => {
-    const token = localStorage.getItem('token');
-    if (!token || token.startsWith('local-token-')) throw new Error('Sign in again to refresh your account.');
-    const user = normalizeShop(await requestAuth('/me', { headers: { Authorization: `Bearer ${token}` } }));
-    localStorage.setItem('currentUser', JSON.stringify(user));
-    return user;
-  },
-  updateProfile: async (data) => {
-    const [firstName, ...lastParts] = (data.name || '').trim().split(/\s+/);
-    const changes = { firstName, lastName: lastParts.join(' '), companyName: data.companyName, phone: data.phone };
-    const updated = normalizeShop(await requestAuth('/profile', { method: 'PUT', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify(changes) }));
-    localStorage.setItem('currentUser', JSON.stringify(updated));
-    return updated;
-  },
-  changePassword: async (currentPassword, newPassword) => {
-    return requestAuth('/password', { method: 'PUT', headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }, body: JSON.stringify({ currentPassword, newPassword }) });
-  }
-};
-
-const requestAdmin = async (path) => {
-  const response = await fetch(`${AUTH_API_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` }
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.message || 'Could not load administrator data.');
-  return data;
-};
-
-export const adminApi = {
-  getShops: () => requestAdmin('/admin/shops'),
-  getShopData: shopId => requestAdmin(`/admin/shops/${encodeURIComponent(shopId)}/data`),
-  addBranch: (shopId, branch) => fetch(`${AUTH_API_BASE}/admin/shops/${encodeURIComponent(shopId)}/branches`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token') || ''}` },
-    body: JSON.stringify(branch)
-  }).then(async response => {
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || 'Could not add branch.');
-    return data;
-  })
-};
 
 // ============================================================
 // INVENTORY API
@@ -575,6 +486,7 @@ Object.assign(aiApi, {
   getForecast: () => requestBusinessData('/ai/forecast')
 });
 
+
 export default {
   invoice: invoiceApi,
   product: productApi,
@@ -585,5 +497,167 @@ export default {
   tax: taxApi,
   ai: aiApi,
   payment: paymentApi,
-  auth: authApi
 };
+
+// ============================================================
+// AUTH API  — 100% localStorage, no backend needed
+// ============================================================
+
+const USERS_KEY = 'yb_users';
+const SESSION_KEY = 'yb_session';
+
+const simpleHash = (str) => {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(16);
+};
+
+const makeToken = (userId) =>
+  btoa(`${userId}:${Date.now()}:${Math.random().toString(36).slice(2)}`);
+
+const getUsers = () => {
+  try { return JSON.parse(localStorage.getItem(USERS_KEY) || '[]'); }
+  catch { return []; }
+};
+const saveUsers = (users) => localStorage.setItem(USERS_KEY, JSON.stringify(users));
+
+// Seed built-in admin if not yet created
+const seedAdmin = () => {
+  const users = getUsers();
+  if (!users.find(u => u.email === 'admin@yourbill.in')) {
+    users.unshift({
+      _id: 'ADMIN001',
+      email: 'admin@yourbill.in',
+      passwordHash: simpleHash('admin@123'),
+      name: 'Platform Admin',
+      firstName: 'Platform',
+      lastName: 'Admin',
+      role: 'admin',
+      companyName: 'YourBill HQ',
+      subscriptionStatus: 'active',
+      plan: 'enterprise',
+      createdAt: new Date().toISOString()
+    });
+    saveUsers(users);
+  }
+};
+seedAdmin();
+
+export const authApi = {
+  register: async ({ firstName, lastName, email, password, companyName, phone, gstin, address, city, state, pincode }) => {
+    await new Promise(r => setTimeout(r, 400)); // simulate network
+    const users = getUsers();
+    const emailLower = (email || '').trim().toLowerCase();
+    if (!emailLower || !password) throw new Error('Email and password are required.');
+    if (users.find(u => u.email === emailLower)) throw new Error('An account with this email already exists. Please login.');
+    if (password.length < 6) throw new Error('Password must be at least 6 characters.');
+
+    const newUser = {
+      _id: 'USR-' + generateId(),
+      email: emailLower,
+      passwordHash: simpleHash(password),
+      name: [firstName, lastName].filter(Boolean).join(' ') || emailLower.split('@')[0],
+      firstName: firstName || '',
+      lastName: lastName || '',
+      companyName: companyName || '',
+      phone: phone || '',
+      gstin: gstin || '',
+      address: address || '',
+      city: city || '',
+      state: state || '',
+      pincode: pincode || '',
+      role: 'user',
+      subscriptionStatus: 'trial',
+      plan: 'free',
+      trialEndsAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      createdAt: new Date().toISOString()
+    };
+    users.push(newUser);
+    saveUsers(users);
+
+    const { passwordHash: _h, ...safeUser } = newUser;
+    const token = makeToken(newUser._id);
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ userId: newUser._id, token }));
+    return { user: safeUser, token };
+  },
+
+  login: async ({ email, password }) => {
+    await new Promise(r => setTimeout(r, 400)); // simulate network
+    if (!email || !password) throw new Error('Please enter your email and password.');
+    const emailLower = email.trim().toLowerCase();
+    const users = getUsers();
+    seedAdmin(); // ensure admin always exists
+
+    const found = users.find(u => u.email === emailLower);
+    if (!found) throw new Error('No account found with this email. Please register first.');
+    if (found.passwordHash !== simpleHash(password)) throw new Error('Incorrect password. Please try again.');
+
+    const { passwordHash: _h, ...safeUser } = found;
+    const token = makeToken(found._id);
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ userId: found._id, token }));
+    return { user: safeUser, token };
+  },
+
+  getMe: async () => {
+    const session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+    if (!session) throw new Error('Not authenticated');
+    const users = getUsers();
+    seedAdmin();
+    const found = users.find(u => u._id === session.userId);
+    if (!found) throw new Error('User not found');
+    const { passwordHash: _h, ...safeUser } = found;
+    return safeUser;
+  },
+
+  updateProfile: async (data) => {
+    const session = JSON.parse(localStorage.getItem(SESSION_KEY) || 'null');
+    if (!session) throw new Error('Not authenticated');
+    const users = getUsers();
+    const idx = users.findIndex(u => u._id === session.userId);
+    if (idx === -1) throw new Error('User not found');
+    if (data.password) {
+      users[idx].passwordHash = simpleHash(data.password);
+      delete data.password;
+    }
+    users[idx] = { ...users[idx], ...data, _id: users[idx]._id, email: users[idx].email };
+    saveUsers(users);
+    const { passwordHash: _h, ...safeUser } = users[idx];
+    return safeUser;
+  },
+
+  logout: async () => {
+    localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem('token');
+    localStorage.removeItem('currentUser');
+    return { success: true };
+  }
+};
+
+// ============================================================
+// ADMIN API  — localStorage stub
+// ============================================================
+export const adminApi = {
+  getShops: async () => {
+    // Return registered users as "shops" for admin view
+    const users = getUsers();
+    return users.filter(u => u.role !== 'admin').map(u => ({
+      ...u,
+      shopName: u.companyName || u.name,
+      renewalDueSoon: u.subscriptionStatus === 'trial' && u.trialEndsAt
+        ? (new Date(u.trialEndsAt) - Date.now()) < 7 * 24 * 60 * 60 * 1000
+        : false,
+      daysUntilExpiry: u.trialEndsAt
+        ? Math.max(0, Math.ceil((new Date(u.trialEndsAt) - Date.now()) / (24 * 60 * 60 * 1000)))
+        : null
+    }));
+  },
+  updateShop: async (id, data) => {
+    const users = getUsers();
+    const idx = users.findIndex(u => u._id === id);
+    if (idx !== -1) { users[idx] = { ...users[idx], ...data }; saveUsers(users); }
+    return users[idx];
+  }
+};
+
