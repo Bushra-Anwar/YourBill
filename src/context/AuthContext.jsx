@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { AuthContext } from './AuthContextValue';
 import { authApi } from '../api';
+import { auth } from '../firebaseConfig';
+import { onAuthStateChanged } from 'firebase/auth';
 
 
 export const AuthProvider = ({ children }) => {
@@ -9,21 +11,29 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let mounted = true;
-    const restoreAccount = async () => {
-      const savedToken = localStorage.getItem('token');
-      if (!savedToken) { if (mounted) setLoading(false); return; }
+    // Listen to Firebase Auth state — restores session on reload
+    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        setUser(null);
+        setToken(null);
+        setLoading(false);
+        return;
+      }
       try {
-        const savedUser = await authApi.getMe();
-        if (mounted) { setUser(savedUser); setToken(savedToken); }
+        const jwt = await firebaseUser.getIdToken();
+        localStorage.setItem('token', jwt);
+        const profile = await authApi.getMe();
+        setUser(profile);
+        setToken(jwt);
       } catch {
-        localStorage.removeItem('currentUser');
+        setUser(null);
+        setToken(null);
         localStorage.removeItem('token');
-        if (mounted) { setUser(null); setToken(null); }
-      } finally { if (mounted) setLoading(false); }
-    };
-    restoreAccount();
-    return () => { mounted = false; };
+      } finally {
+        setLoading(false);
+      }
+    });
+    return () => unsub();
   }, []);
 
   const login = (userData, jwtToken) => {
@@ -34,7 +44,8 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('currentUser', JSON.stringify(normalizedUser));
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try { await authApi.logout(); } catch { /* ignore */ }
     setUser(null);
     setToken(null);
     localStorage.removeItem('token');

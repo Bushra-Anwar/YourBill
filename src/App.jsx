@@ -143,11 +143,11 @@ function App() {
   const [loginGateFeature, setLoginGateFeature] = useState('');
 
   // Tabs that require login before opening
-  const protectedTabs = ['CustomerManagement','ProductServiceManagement','InvoiceManagement',
-    'QuotationManagement','PaymentManagement','PaymentTracking','TaxManagement',
-    'InventoryManagement','ReportsAnalytics','UserManagement','NotificationsManagement',
-    'DocumentManagement','AccountingManagement','SubscriptionManagement','EcommerceIntegration',
-    'AdminPanel','AdvancedFeatures','AIFeatures','POSBilling','Dashboard','AdminShops','ProfileSettings'];
+  const protectedTabs = ['CustomerManagement', 'ProductServiceManagement', 'InvoiceManagement',
+    'QuotationManagement', 'PaymentManagement', 'PaymentTracking', 'TaxManagement',
+    'InventoryManagement', 'ReportsAnalytics', 'UserManagement', 'NotificationsManagement',
+    'DocumentManagement', 'AccountingManagement', 'SubscriptionManagement', 'EcommerceIntegration',
+    'AdminPanel', 'AdvancedFeatures', 'AIFeatures', 'POSBilling', 'Dashboard', 'AdminShops', 'ProfileSettings'];
 
   const handleFeatureClick = (tab, featureName) => {
     if (!user && protectedTabs.includes(tab)) {
@@ -202,7 +202,7 @@ function App() {
   const filteredResults = searchQuery.trim() === '' ? [] : searchableFeatures.filter(f =>
     (!user || hasFeatureAccess(user, f.tab)) &&
     (f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    f.keywords.toLowerCase().includes(searchQuery.toLowerCase()))
+      f.keywords.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   useEffect(() => {
@@ -258,7 +258,7 @@ function App() {
           <nav className="navbar">
             <div className="nav-brand">
               {user && <button type="button" className="workspace-menu-toggle" aria-label="Open workspace features" aria-expanded={showWorkspaceMenu} onClick={() => setShowWorkspaceMenu(open => !open)}><Menu size={20} /></button>}
-              <span className="rainbow-text logo" style={{cursor:'pointer'}} onClick={() => setActiveTab('Home')}>YourBill</span>
+              <span className="rainbow-text logo" style={{ cursor: 'pointer' }} onClick={() => setActiveTab('Home')}>YourBill</span>
             </div>
             <div className="nav-links">
               <button className={`nav-link ${activeTab === 'Home' ? 'active' : ''}`} onClick={() => setActiveTab('Home')}><House size={16} aria-hidden="true" /> Main</button>
@@ -377,7 +377,7 @@ function App() {
           <main className="main-content">
             {activeTab === 'Home' && (
               <div className="home-view fade-in">
-                                <header className="hero hero-advanced">
+                <header className="hero hero-advanced">
                   <div className="hero-copy">
                     <span className="hero-kicker"><span className="hero-kicker-dot" /> BILLING THAT KEEPS BUSINESS MOVING</span>
                     <h1 className="hero-title">Less time on billing.<br /><span className="rainbow-text">More room to grow.</span></h1>
@@ -630,51 +630,61 @@ function App() {
       {/* ── Login Gate Modal ── */}
       {showLoginGate && (
         <div
-          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.65)', zIndex:9999,
-            display:'flex', alignItems:'center', justifyContent:'center', backdropFilter:'blur(4px)' }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 9999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(4px)'
+          }}
           onClick={() => setShowLoginGate(false)}
           role="dialog" aria-modal="true" aria-label="Login required"
         >
           <div
             onClick={e => e.stopPropagation()}
-            style={{ background:'var(--glass-bg, #fff)', border:'1px solid var(--glass-border, #ddd)',
-              borderRadius:'18px', padding:'2.5rem 2rem', width:'min(420px, 92vw)',
-              boxShadow:'0 24px 80px rgba(0,0,0,0.25)', textAlign:'center',
-              animation:'fadeInUp 0.25s ease' }}
+            style={{
+              background: 'var(--glass-bg, #fff)', border: '1px solid var(--glass-border, #ddd)',
+              borderRadius: '18px', padding: '2.5rem 2rem', width: 'min(420px, 92vw)',
+              boxShadow: '0 24px 80px rgba(0,0,0,0.25)', textAlign: 'center',
+              animation: 'fadeInUp 0.25s ease'
+            }}
           >
-            <div style={{ fontSize:'2.8rem', marginBottom:'0.6rem' }}>🔐</div>
-            <h2 style={{ fontSize:'1.4rem', fontWeight:800, marginBottom:'0.4rem' }}>
+            <div style={{ fontSize: '2.8rem', marginBottom: '0.6rem' }}>🔐</div>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: '0.4rem' }}>
               Login Required
             </h2>
-            <p style={{ color:'var(--text-secondary, #666)', marginBottom:'0.2rem', fontSize:'0.95rem' }}>
-              <strong style={{ color:'var(--text-primary, #111)' }}>{loginGateFeature}</strong> is a workspace feature.
+            <p style={{ color: 'var(--text-secondary, #666)', marginBottom: '0.2rem', fontSize: '0.95rem' }}>
+              <strong style={{ color: 'var(--text-primary, #111)' }}>{loginGateFeature}</strong> is a workspace feature.
             </p>
-            <p style={{ color:'var(--text-secondary, #666)', marginBottom:'1.8rem', fontSize:'0.9rem' }}>
+            <p style={{ color: 'var(--text-secondary, #666)', marginBottom: '1.8rem', fontSize: '0.9rem' }}>
               Please login or create a free account to access this feature.
             </p>
-            <div style={{ display:'flex', gap:'0.75rem', justifyContent:'center', flexWrap:'wrap' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
               <button
-                style={{ background:'linear-gradient(135deg,#7c3aed,#6b21a8)', color:'#fff',
-                  border:'none', borderRadius:'10px', padding:'0.75rem 1.8rem',
-                  fontWeight:700, fontSize:'1rem', cursor:'pointer', flex:1, minWidth:'120px' }}
+                style={{
+                  background: 'linear-gradient(135deg,#7c3aed,#6b21a8)', color: '#fff',
+                  border: 'none', borderRadius: '10px', padding: '0.75rem 1.8rem',
+                  fontWeight: 700, fontSize: '1rem', cursor: 'pointer', flex: 1, minWidth: '120px'
+                }}
                 onClick={() => { setShowLoginGate(false); setActiveTab('Login'); }}
               >
-                <LogIn size={16} style={{marginRight:'6px', verticalAlign:'middle'}} />
+                <LogIn size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
                 Login
               </button>
               <button
-                style={{ background:'linear-gradient(135deg,#059669,#047857)', color:'#fff',
-                  border:'none', borderRadius:'10px', padding:'0.75rem 1.8rem',
-                  fontWeight:700, fontSize:'1rem', cursor:'pointer', flex:1, minWidth:'120px' }}
+                style={{
+                  background: 'linear-gradient(135deg,#059669,#047857)', color: '#fff',
+                  border: 'none', borderRadius: '10px', padding: '0.75rem 1.8rem',
+                  fontWeight: 700, fontSize: '1rem', cursor: 'pointer', flex: 1, minWidth: '120px'
+                }}
                 onClick={() => { setShowLoginGate(false); setActiveTab('Registration'); }}
               >
-                <UserPlus size={16} style={{marginRight:'6px', verticalAlign:'middle'}} />
+                <UserPlus size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
                 Register Free
               </button>
             </div>
             <button
-              style={{ marginTop:'1.2rem', background:'transparent', border:'none',
-                color:'var(--text-secondary, #888)', cursor:'pointer', fontSize:'0.85rem' }}
+              style={{
+                marginTop: '1.2rem', background: 'transparent', border: 'none',
+                color: 'var(--text-secondary, #888)', cursor: 'pointer', fontSize: '0.85rem'
+              }}
               onClick={() => setShowLoginGate(false)}
             >
               ✕ Close

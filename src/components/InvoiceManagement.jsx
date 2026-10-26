@@ -6,7 +6,7 @@ import { AuthContext } from '../context/AuthContextValue';
 
 export default function InvoiceManagement({ onBack }) {
   const { user } = React.useContext(AuthContext);
-  const [activeView, setActiveView] = useState('dashboard'); // dashboard, create, view
+  const [activeView, setActiveView] = useState('dashboard');
   const [invoices, setInvoices] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
@@ -24,12 +24,10 @@ export default function InvoiceManagement({ onBack }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTemplate, setActiveTemplate] = useState('modern');
 
-  // Payment recording state
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
 
-  // Form State for creating new invoice
   const [newInvoice, setNewInvoice] = useState({
     id: '',
     customer: '',
@@ -174,7 +172,6 @@ export default function InvoiceManagement({ onBack }) {
     });
   };
 
-  // Calculations
   const subtotal = newInvoice.items.reduce((sum, item) => sum + ((parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0)), 0);
   const totalTax = newInvoice.items.reduce((sum, item) => sum + (((parseFloat(item.qty) || 0) * (parseFloat(item.rate) || 0) * (parseFloat(item.tax) || 0)) / 100), 0);
 
@@ -195,49 +192,52 @@ export default function InvoiceManagement({ onBack }) {
     }
 
     try {
+      const matchedCustomer = customers.find(c => c.name === newInvoice.customer);
+
       const payload = {
-        invoiceNumber: newInvoice.id || undefined,
-        customerId: customers.find(customer => customer.name === newInvoice.customer)?._id,
-        customerName: newInvoice.customer,
-        customerPhone: newInvoice.customerPhone,
-        customerGstin: newInvoice.customerGstin,
-        date: newInvoice.date,
-        dueDate: newInvoice.dueDate || newInvoice.date,
-        type: newInvoice.type,
+        invoiceNumber: newInvoice.id?.trim() || `INV-${Date.now().toString().slice(-6)}`,
+        customerId: matchedCustomer?._id || matchedCustomer?.id || '',
+        customerName: newInvoice.customer || '',
+        customerPhone: newInvoice.customerPhone || '',
+        customerGstin: newInvoice.customerGstin || '',
+        date: newInvoice.date || new Date().toISOString().slice(0, 10),
+        dueDate: newInvoice.dueDate || newInvoice.date || new Date().toISOString().slice(0, 10),
+        type: newInvoice.type || 'Tax Invoice',
         items: newInvoice.items.map(it => ({
-          productId: it.productId,
-          name: it.name,
-          description: it.description,
-          hsnCode: it.hsnCode,
+          productId: it.productId || '',
+          name: it.name || '',
+          description: it.description || '',
+          hsnCode: it.hsnCode || '',
           qty: parseFloat(it.qty) || 1,
           rate: parseFloat(it.rate) || 0,
           taxRate: parseFloat(it.tax) || 0,
-          amount: it.amount
+          amount: it.amount || 0
         })),
-        subtotal,
+        subtotal: subtotal || 0,
         discount: parseFloat(newInvoice.discount) || 0,
-        discountType: newInvoice.discountType,
-        discountAmount,
-        totalTax,
-        cgstTotal: totalTax / 2,
-        sgstTotal: totalTax / 2,
-        grandTotal,
-        totalAmount: grandTotal,
+        discountType: newInvoice.discountType || '%',
+        discountAmount: discountAmount || 0,
+        totalTax: totalTax || 0,
+        cgstTotal: (totalTax / 2) || 0,
+        sgstTotal: (totalTax / 2) || 0,
+        grandTotal: grandTotal || 0,
+        totalAmount: grandTotal || 0,
         paidAmount: newInvoice.paymentStatus === 'Paid' ? grandTotal : 0,
         balanceAmount: newInvoice.paymentStatus === 'Paid' ? 0 : grandTotal,
         status: newInvoice.paymentStatus === 'Paid' ? 'Paid' : 'Unpaid',
-        paymentStatus: newInvoice.paymentStatus,
-        paymentMethod: newInvoice.paymentMethod,
-        notes: newInvoice.notes,
-        terms: newInvoice.terms
+        paymentStatus: newInvoice.paymentStatus || 'Unpaid',
+        paymentMethod: newInvoice.paymentMethod || 'Cash',
+        notes: newInvoice.notes || '',
+        terms: newInvoice.terms || ''
       };
 
-      await invoiceApi.create(payload);
+      const cleanPayload = JSON.parse(JSON.stringify(payload));
+
+      await invoiceApi.create(cleanPayload);
       alert('✅ Invoice successfully created and saved to database!');
       await loadInvoices();
       setActiveView('dashboard');
 
-      // Reset form
       setNewInvoice({
         id: '',
         customer: customers.length > 0 ? customers[0].name : '',
@@ -556,7 +556,6 @@ export default function InvoiceManagement({ onBack }) {
           </div>
         </div>
 
-        {/* Invoice Line Items */}
         <div className="inv-items-section">
           <table className="inv-items-table">
             <thead>
@@ -662,7 +661,6 @@ export default function InvoiceManagement({ onBack }) {
           </button>
         </div>
 
-        {/* Invoice Footer / Totals */}
         <div className="inv-form-footer">
           <div className="inv-notes">
             <div className="input-group">
@@ -742,7 +740,6 @@ export default function InvoiceManagement({ onBack }) {
 
     return (
       <div className="inv-preview-view fade-in">
-        {/* Screen-only action bar */}
         <div className="inv-header no-print">
           <div>
             <button className="back-btn" onClick={() => setActiveView('dashboard')}>← Back to Invoices</button>
@@ -779,7 +776,6 @@ export default function InvoiceManagement({ onBack }) {
           </div>
         </div>
 
-        {/* ── PRINTABLE INVOICE ── */}
         {activeTemplate === 'thermal' ? (
           <div className="thermal-wrapper">
             <div className="thermal-header">
@@ -835,11 +831,9 @@ export default function InvoiceManagement({ onBack }) {
             </div>
           </div>
         ) : (
-          /* ── A4 / A5 INVOICE ── */
           <div className={`invoice-paper template-${activeTemplate}`}>
             {st === 'Paid' && <div className="watermark-paid">PAID</div>}
 
-            {/* Header */}
             <div className="paper-header" style={{ borderBottom: `3px solid ${themeColor}` }}>
               <div className="company-details">
                 <h1 style={{ color: themeColor }}>🏢 {user?.companyName || 'Your Business'}</h1>
@@ -859,7 +853,6 @@ export default function InvoiceManagement({ onBack }) {
               </div>
             </div>
 
-            {/* Billing Details */}
             <div className="billing-section">
               <div className="bill-to-box">
                 <span className="section-label-strip" style={{ background: themeColor }}>BILLED TO</span>
@@ -882,7 +875,6 @@ export default function InvoiceManagement({ onBack }) {
               </div>
             </div>
 
-            {/* Items Table */}
             <table className="paper-table">
               <thead>
                 <tr>
@@ -911,7 +903,6 @@ export default function InvoiceManagement({ onBack }) {
               </tbody>
             </table>
 
-            {/* Footer: Terms + Totals */}
             <div className="paper-footer">
               <div className="terms-area">
                 <h4>Terms &amp; Conditions</h4>
@@ -955,7 +946,6 @@ export default function InvoiceManagement({ onBack }) {
           </div>
         )}
 
-        {/* Record Payment Modal */}
         {showPaymentModal && (
           <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
             <div className="modal-content" style={{ background: 'var(--bg-secondary)', padding: '2rem', borderRadius: '12px', width: '400px', border: '1px solid var(--border-color)' }}>
