@@ -1104,3 +1104,97 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 @keyframes fadeInUp { from { opacity:0; transform:translateY(28px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }
 .fade-in { animation: fadeIn 0.35s ease-out both; }
+
+/* ============================================================
+   GLOBAL BULLETPROOF PRINT ISOLATION
+   Hides all UI chrome, website navbars, buttons and sidebars
+   ============================================================ */
+@media print {
+  /* Keep all document tree open so printer engine doesn't produce blank pages */
+  html, body, #root, .app-container, .app-workspace,
+  .main-dashboard-layout, .billing-screen-content,
+  .invoice-management-wrapper, .inv-preview-view,
+  .pos-wrapper, .pos-grid, .pos-right-col,
+  .print-modal-overlay, .print-modal-content {
+    display: block !important;
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    width: 100% !important;
+    visibility: visible !important;
+  }
+
+  /* Hide all website chrome, navigation and controls */
+  .mobile-bottom-nav,
+  .mobile-only,
+  .nav-bar,
+  .app-sidebar,
+  .sidebar,
+  .universal-header,
+  .universal-search,
+  .universal-topbar,
+  .pos-top-bar,
+  .pos-topbar,
+  .pos-left-col,
+  .pos-mid-col,
+  .pos-bottom-actions,
+  .pos-top-actions,
+  .pos-currency-label,
+  .pos-back-btn,
+  .pos-btn-share,
+  .pos-btn-complete,
+  .header-actions,
+  .checkout-actions,
+  .whatsapp-share-btn,
+  .back-btn,
+  .add-row-btn,
+  .no-print,
+  .bill-format-toggle,
+  .nav-item,
+  header,
+  nav,
+  aside,
+  button:not(.thermal-receipt-container *):not(.standard-inv-container *) {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  body, html {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .standard-inv-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .thermal-receipt-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 76mm !important;
+    max-width: 76mm !important;
+    margin: 0 auto !important;
+    padding: 2mm 3mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+}

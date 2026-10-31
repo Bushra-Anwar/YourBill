@@ -202,7 +202,23 @@ export const invoiceApi = {
 // PRODUCTS API
 // ============================================================
 export const productApi = {
-  getAll: async () => snap2arr(await getDocs(userCol('products'))),
+  getAll: async () => {
+    try {
+      const snap = await getDocs(userCol('products'));
+      const list = snap2arr(snap);
+      if (list && list.length > 0) {
+        try { localStorage.setItem('user_products_cache', JSON.stringify(list)); } catch {}
+        return list;
+      }
+    } catch (e) {
+      // Fallback to locally cached products if offline
+    }
+    try {
+      const cached = localStorage.getItem('user_products_cache');
+      if (cached) return JSON.parse(cached);
+    } catch {}
+    return [];
+  },
   create: async (data) => {
     const id = generateId();
     const record = sanitizeFirestoreData({
@@ -212,16 +228,38 @@ export const productApi = {
       status: 'Active',
       createdAt: new Date().toISOString()
     });
-    await setDoc(userDocRef('products', id), record);
+    try {
+      await setDoc(userDocRef('products', id), record);
+    } catch (e) {
+      console.warn('Saving product locally:', e);
+    }
+    try {
+      const current = JSON.parse(localStorage.getItem('user_products_cache') || '[]');
+      localStorage.setItem('user_products_cache', JSON.stringify([...current, record]));
+    } catch {}
     return record;
   },
   update: async (id, data) => {
     const cleanData = sanitizeFirestoreData(data);
-    await updateDoc(userDocRef('products', id), cleanData);
+    try {
+      await updateDoc(userDocRef('products', id), cleanData);
+    } catch (e) {}
+    try {
+      const current = JSON.parse(localStorage.getItem('user_products_cache') || '[]');
+      const updated = current.map(p => p._id === id ? { ...p, ...cleanData } : p);
+      localStorage.setItem('user_products_cache', JSON.stringify(updated));
+    } catch {}
     return { _id: id, ...cleanData };
   },
   delete: async (id) => {
-    await deleteDoc(userDocRef('products', id));
+    try {
+      await deleteDoc(userDocRef('products', id));
+    } catch (e) {}
+    try {
+      const current = JSON.parse(localStorage.getItem('user_products_cache') || '[]');
+      const filtered = current.filter(p => p._id !== id);
+      localStorage.setItem('user_products_cache', JSON.stringify(filtered));
+    } catch {}
     return { success: true };
   }
 };

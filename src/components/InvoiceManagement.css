@@ -1,2407 +1,1850 @@
-import {
-  useState,
-  useEffect,
-  useCallback,
-  useContext
+/* ============================================================
+   INVOICE MANAGEMENT — PROFESSIONAL UI + PERFECT PRINT STYLES
+   Standard GST Tax Invoice — A4 / A5 / Thermal
+   ============================================================ */
+
+/* ============================================================
+   SCREEN LAYOUT
+   ============================================================ */
+.invoice-management-wrapper {
+  animation: fadeIn 0.4s ease-out;
+  color: var(--text-primary);
+}
+
+.inv-dashboard,
+.inv-create-view,
+.inv-preview-view {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
 
-from 'react';
+.inv-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.inv-title {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+}
+
+.inv-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+/* ============================================================
+   INVOICE LIST TABLE
+   ============================================================ */
+.inv-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.inv-table th {
+  text-align: left;
+  padding: 0.9rem 1.2rem;
+  background: var(--hover-bg);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.85rem;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+}
+
+.inv-table td {
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+}
+
+.inv-table tr.clickable-row:hover {
+  background: var(--hover-bg);
+  cursor: pointer;
+}
+
+.invoice-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.type-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: var(--hover-bg);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+}
+
+.customer-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 500;
+}
+
+.avatar.small {
+  width: 32px;
+  height: 32px;
+  font-size: 1rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6b21a8, #3b82f6);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.date-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.action-group {
+  display: flex;
+  gap: 0.5rem;
+}
 
-import {
-  Plus,
-  Printer,
-  Trash2,
-  ArrowLeft,
-  Receipt,
-  FileText
-}
-
-from 'lucide-react';
+/* Status Badges */
+.status-badge {
+  padding: 0.3rem 0.75rem;
+  border-radius: 50px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+.status-badge.paid    { background: rgba(22,163,74,0.15); color: #16a34a; }
+.status-badge.unpaid  { background: rgba(239,68,68,0.12); color: #ef4444; }
+.status-badge.partial { background: rgba(245,158,11,0.15); color: #d97706; }
+.status-badge.overdue { background: rgba(220,38,38,0.15); color: #dc2626; }
+.status-badge.warning { background: rgba(245,158,11,0.15); color: #b45309; }
 
-import {
-  invoiceApi,
-  customerApi,
-  productApi
+/* ============================================================
+   INVOICE PAPER — SCREEN VIEW
+   ============================================================ */
+.invoice-paper {
+  background: #ffffff;
+  color: #111827;
+  padding: 40px 48px;
+  max-width: 860px;
+  margin: 0 auto;
+  border-radius: 8px;
+  box-shadow: 0 4px 40px rgba(0,0,0,0.15);
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  position: relative;
 }
 
-from '../api';
-
-import {
-  AuthContext
+/* ---- Paper Header ---- */
+.paper-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 20px;
+  margin-bottom: 24px;
+  gap: 2rem;
 }
-
-from '../context/AuthContextValue';
-
-const GeometricCorner=()=>(<svg width="220" height="75" viewBox="0 0 220 75" style= {
-      {
-      position: 'absolute', top: 0, right: 0, pointerEvents: 'none'
-    }
-  }
-
-  > <polygon points="100,0 130,0 115,25" fill="#e2d9f3" opacity="0.7" /> <polygon points="130,0 160,0 145,25" fill="#7dd3fc" opacity="0.6" /> <polygon points="115,25 145,25 130,50" fill="#bae6fd" opacity="0.8" /> <polygon points="145,25 175,25 160,50" fill="#0284c7" opacity="0.85" /> <polygon points="160,0 190,0 175,25" fill="#0ea5e9" opacity="0.9" /> <polygon points="175,25 205,25 190,50" fill="#0369a1" opacity="0.9" /> <polygon points="190,0 220,0 205,25" fill="#38bdf8" opacity="0.7" /> <polygon points="205,25 220,25 220,50" fill="#1e3a8a" opacity="0.9" /> <polygon points="160,50 190,50 175,75" fill="#bae6fd" opacity="0.6" /> <polygon points="190,50 220,50 205,75" fill="#0284c7" opacity="0.4" /> <polygon points="85,25 115,25 100,50" fill="#f3e8ff" opacity="0.6" /> </svg>);
-
-export default function InvoiceManagement({
-  onBack, defaultMode='zoho', initialAction='dashboard'
-
-}) {
-  const {
-    user
-  }
-
-  =useContext(AuthContext);
-  const [activeView,
-  setActiveView]=useState(initialAction); // 'dashboard' | 'create' | 'view'
-  const [invoiceStyle,
-  setInvoiceStyle]=useState(defaultMode); // 'zoho' | 'pos'
-  const [invoices,
-  setInvoices]=useState([]);
-  const [customers,
-  setCustomers]=useState([]);
-  const [products,
-  setProducts]=useState([]);
-  const [selectedInvoice,
-  setSelectedInvoice]=useState(null);
-  const [loading,
-  setLoading]=useState(false);
-
-  const [newInvoice,
-  setNewInvoice]=useState({
-
-    id: '',
-    customer: '',
-    customerPhone: '',
-    customerGstin: '',
-    customerAddress: '',
-    shipToAddress: '',
-    date: new Date().toISOString().slice(0, 10),
-    dueDate: new Date().toISOString().slice(0, 10),
-    termsLabel: 'Due on Receipt',
-    items: [ {
-      id: 1, productId: '', name: '', description: '', qty: 1, unit: 'Piece', rate: 0, tax: 5, amount: 0
-    }
-
-    ],
-    paymentStatus: 'Paid',
-    paymentMethod: 'Cash',
-    cashTendered: '',
-    notes: 'Thanks for your business.',
-    terms: 'Full payment is due upon receipt of this invoice. Late payments may incur additional charges or interest as per the applicable laws.'
-  });
-
-const loadInvoices=useCallback(async ()=> {
-    try {
-      setLoading(true);
-
-      const invData=await invoiceApi.getAll({});
-    setInvoices(invData || []);
-  }
-
-  catch (err) {
-    console.error('Error loading invoices:', err);
-  }
 
-  finally {
-    setLoading(false);
-  }
+.company-details h1 {
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 6px;
+  letter-spacing: -0.5px;
 }
-
-, []);
-
-const loadMasterData=useCallback(async ()=> {
-    try {
-      const [cList, pList]=await Promise.all([customerApi.getAll(), productApi.getAll()]);
-      setCustomers(cList || []);
-      setProducts(pList || []);
-    }
-
-    catch (err) {
-      console.error('Error loading master data:', err);
-    }
-  }
-
-  , []);
-
-useEffect(()=> {
-    loadInvoices();
-  }
-
-  , [loadInvoices]);
-
-useEffect(()=> {
-    loadMasterData();
-  }
-
-  , [loadMasterData]);
-
-const handleCustomerSelect=(custName)=> {
-  const found=customers.find(c=> c.name===custName);
 
-  setNewInvoice(prev=> ({
-      ...prev,
-      customer: custName,
-      customerPhone: found?.phone || prev.customerPhone,
-      customerGstin: found?.gst || prev.customerGstin,
-      customerAddress: found?.address || prev.customerAddress,
-      shipToAddress: found?.address || prev.shipToAddress
-    }));
+.company-details p {
+  font-size: 12px;
+  color: #374151;
+  margin: 2px 0;
 }
 
-;
-
-const handleProductSelect=(rowId, prodId)=> {
-  const prod=products.find(p=> p._id===prodId || p.productId===prodId);
-  if ( !prod) return;
-  const parsedTax=parseFloat(String(prod.taxRate || '').replace(/[^0-9.]/g, ''));
-  const taxNum=Number.isFinite(parsedTax) ? parsedTax: 5;
-
-  setNewInvoice(prev=> ({
-
-      ...prev,
-      items: prev.items.map(it=> {
-          if (it.id===rowId) {
-            const qty=Number(it.qty) || 1;
-            const rate=Number(prod.price) || 0;
-
-            return {
-              ...it,
-              productId: prod._id,
-              name: prod.name,
-              description: prod.description || prod.category || '',
-              rate,
-              tax: taxNum,
-              amount: qty * rate
-            }
-
-            ;
-          }
-
-          return it;
-        })
-    }));
+.invoice-title-area {
+  text-align: right;
+  min-width: 240px;
 }
-
-;
-
-const handleItemChange=(id, field, value)=> {
-  setNewInvoice(prev=> ({
-
-      ...prev,
-      items: prev.items.map(item=> {
-          if (item.id===id) {
-            const updated= {
-              ...item, [field]: value
-            }
-
-            ;
-            const qty=parseFloat(updated.qty) || 0;
-            const rate=parseFloat(updated.rate) || 0;
-            updated.amount=qty * rate;
-            return updated;
-          }
 
-          return item;
-        })
-    }));
+.invoice-title-area h2 {
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  margin: 0 0 12px;
+  text-transform: uppercase;
 }
 
-;
+.inv-meta-table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+}
 
-const handleAddItem=()=> {
-  setNewInvoice(prev=> ({
-
-      ...prev,
-      items: [ ...prev.items,
-      {
-      id: Date.now(), productId: '', name: '', description: '', qty: 1, unit: 'Piece', rate: 0, tax: prev.items[0]?.tax || 5, amount: 0
-    }
-
-    ]
-  }));
+.inv-meta-table td {
+  padding: 3px 6px;
 }
 
-;
+.inv-meta-table td:first-child {
+  color: #6b7280;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.inv-meta-table td:last-child {
+  font-weight: 700;
+  color: #111827;
+}
+
+/* ---- Billing Section ---- */
+.billing-section {
+  display: flex;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-bottom: 24px;
+}
 
-const handleRemoveItem=(id)=> {
-  if (newInvoice.items.length===1) return;
-
-  setNewInvoice(prev=> ({
-      ...prev, items: prev.items.filter(i=> i.id !==id)
-    }));
+.bill-to-box {
+  flex: 1;
+  max-width: 55%;
+}
+
+.section-label-strip {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 4px 4px 0 0;
+  display: inline-block;
 }
-
-;
-
-const subtotal=newInvoice.items.reduce((sum, it)=> sum + ((parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0)), 0);
-const avgTaxRate=parseFloat(newInvoice.items[0]?.tax) || 0;
-const totalTax=(subtotal * avgTaxRate) / 100;
-const grandTotal=subtotal+totalTax;
-
-const handleSaveInvoice=async ()=> {
-  const cust=newInvoice.customer.trim() || (invoiceStyle==='pos' ? 'Walk-in Customer' : '');
-
-  if ( !cust) {
-    alert('Please enter Customer Name in Bill To section.');
-    return;
-  }
-
-  if (subtotal <=0) {
-    alert('Please add at least one item with a valid Rate.');
-    return;
-  }
-
-  try {
-    const payload= {
-      invoiceNumber: newInvoice.id?.trim() || `INV-$ {
-        String(invoices.length + 1).padStart(6, '0')
-      }
-
-      `,
-      customerName: cust,
-      customerPhone: newInvoice.customerPhone || '',
-      customerGstin: newInvoice.customerGstin || '',
-      customerAddress: newInvoice.customerAddress || '',
-      shipToAddress: newInvoice.shipToAddress || newInvoice.customerAddress || '',
-      date: newInvoice.date,
-      dueDate: newInvoice.dueDate || newInvoice.date,
-      termsLabel: newInvoice.termsLabel || 'Due on Receipt',
-      invoiceStyle,
-      items: newInvoice.items.map(it=> ({
-          productId: it.productId || '',
-          name: it.name || 'Item',
-          description: it.description || '',
-          qty: parseFloat(it.qty) || 1,
-          unit: it.unit || 'Piece',
-          rate: parseFloat(it.rate) || 0,
-          taxRate: avgTaxRate,
-          amount: (parseFloat(it.qty) || 1) * (parseFloat(it.rate) || 0)
-        })),
-    subtotal,
-    totalTax,
-    cgstTotal: totalTax / 2,
-    sgstTotal: totalTax / 2,
-    taxRate: avgTaxRate,
-    grandTotal,
-    totalAmount: grandTotal,
-    paidAmount: newInvoice.paymentStatus==='Paid' ? grandTotal : 0,
-    balanceAmount: newInvoice.paymentStatus==='Paid' ? 0 : grandTotal,
-    status: newInvoice.paymentStatus,
-    paymentStatus: newInvoice.paymentStatus,
-    paymentMethod: newInvoice.paymentMethod,
-    notes: newInvoice.notes,
-    terms: newInvoice.terms
-  }
-
-  ;
-
-  const saved=await invoiceApi.create(payload);
-  await loadInvoices();
-  setSelectedInvoice(saved);
-  setActiveView('view');
-}
-
-catch (err) {
-  alert(`Error saving invoice: $ {
-      err.message
-    }
-
-    `);
-}
-}
-
-;
-
-// Company details pulled directly from logged-in user
-const companyName=user?.companyName || user?.shopName || user?.name || 'Zylker Electronics Hub';
-const companyAddress=user?.address || '14B, Northern Street\nGreater South Avenue';
-const companyCityState=[user?.city,
-user?.state,
-user?.pincode].filter(Boolean).join(' ') || 'Gandhinagar, Gujarat 382010';
-const companyPhone=user?.phone || '+91 98765 43210';
-const companyGstin=user?.gstin || '24AAACZ1234A1Z5';
-
-// ============================================================================
-// 1. REAL POS THERMAL RECEIPT (80mm SUPERMARKET / RETAIL BILL)
-// ============================================================================
-const renderPosThermalSheet=(isEditable)=> {
-  const inv=isEditable ? newInvoice : (selectedInvoice || invoices[0] || {});
-
-  const invNum=isEditable ? (newInvoice.id || `POS-$ {
-      String(invoices.length + 1).padStart(4, '0')
-    }
-
-    `) : (inv.invoiceNumber || inv.id || 'POS-0001');
-  const itemsList=isEditable ? newInvoice.items : (inv.items || []);
-  const subVal=isEditable ? subtotal : Number(inv.subtotal || 0);
-  const taxRateVal=isEditable ? avgTaxRate : Number(inv.taxRate ?? inv.items?.[0]?.taxRate ?? 5);
-  const taxAmt=isEditable ? totalTax : Number(inv.totalTax || 0);
-  const totalVal=isEditable ? grandTotal : Number(inv.grandTotal || inv.totalAmount || 0);
-  const totalQty=itemsList.reduce((s, i)=> s + (Number(i.qty) || 1), 0);
-
-  const posInput= {
-    width: '100%',
-      border: '1px dashed #666',
-      background: '#fffbeb',
-      padding: '3px 5px',
-      fontFamily: "'Courier New', Courier, monospace",
-      fontSize: '12px',
-      color: '#000',
-      boxSizing: 'border-box'
-  }
-
-  ;
-
-  return (<div className="printable-area-wrapper" style= {
-        {
-        maxWidth: '420px', margin: '0 auto', paddingBottom: '40px'
-      }
-    }
-
-    > <div className="print-Receipt-sheet" style= {
-        {
-        width: '340px',
-        margin: '0 auto',
-        background: '#ffffff',
-        padding: '18px 14px',
-        boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-        fontFamily: "'Courier New', Courier, monospace",
-        color: '#000000',
-        fontSize: '12px',
-        lineHeight: '1.35',
-        borderTop: '5px jagged #333'
-      }
-    }
-
-    > {
-      /* Store Header */
-    }
-
-    <div style= {
-        {
-        textAlign: 'center', marginBottom: '8px'
-      }
-    }
-
-    > <div style= {
-        {
-        fontSize: '17px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.5px'
-      }
-    }
-
-    > {
-      companyName
-    }
-
-    </div> <div style= {
-        {
-        whiteSpace: 'pre-line', fontSize: '11px'
-      }
-    }
-
-    > {
-      companyAddress
-    }
-
-    </div> <div style= {
-        {
-        fontSize: '11px'
-      }
-    }
-
-    > {
-      companyCityState
-    }
-
-    </div> <div style= {
-        {
-        fontSize: '11px'
-      }
-    }
-
-    >PH: {
-      companyPhone
-    }
-
-    </div> <div style= {
-        {
-        fontSize: '11px', fontWeight: 700
-      }
-    }
-
-    >GSTIN: {
-      companyGstin
-    }
-
-    </div> <div style= {
-        {
-        margin: '6px 0', borderBottom: '1px dashed #000'
-      }
-    }
-
-    ></div> <div style= {
-        {
-        fontWeight: 900, fontSize: '13px', letterSpacing: '1px'
-      }
-    }
-
-    >TAX INVOICE / CASH MEMO</div> <div style= {
-        {
-        margin: '6px 0', borderBottom: '1px dashed #000'
-      }
-    }
-
-    ></div> </div> {
-      /* Bill Meta */
-    }
-
-    <div style= {
-        {
-        fontSize: '11.5px', marginBottom: '6px'
-      }
-    }
-
-    > <div style= {
-        {
-        display: 'flex', justifyContent: 'space-between'
-      }
-    }
-
-    > <span>BILL NO: <strong> {
-      invNum
-    }
-
-    </strong></span> <span>DATE: {
-      isEditable ? newInvoice.date : inv.date
-    }
-
-    </span> </div> <div style= {
-        {
-        display: 'flex', justifyContent: 'space-between'
-      }
-    }
-
-    > <span>TIME: {
-      new Date().toLocaleTimeString([], {
-        hour: '2-digit', minute: '2-digit'
-      })
-  }
-
-  </span> <span>MODE: {
-    isEditable ? (<select value= {
-        newInvoice.paymentMethod
-      }
-
-      onChange= {
-        (e)=> setNewInvoice({
-          ...newInvoice, paymentMethod: e.target.value
-        })
-    }
 
-    style= {
-        {
-        fontFamily: 'inherit', fontSize: '11px', fontWeight: 700
-      }
-    }
-
-    > <option value="Cash" >CASH</option> <option value="UPI" >UPI</option> <option value="Card" >CARD</option> </select>) : (inv.paymentMethod || 'CASH')
+.bill-to-box .box-content {
+  border-radius: 0 4px 4px 4px;
+  padding: 12px 14px;
 }
 
-</span> </div> <div style= {
-    {
-    marginTop: '4px'
-  }
+.bill-to-box .customer-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 4px;
 }
-
-> {
-  isEditable ? (<div style= {
-        {
-        display: 'flex', gap: '4px', marginTop: '4px'
-      }
-    }
-
-    > <input type="text"
-    placeholder="Customer Name (Walk-in)"
-
-    value= {
-      newInvoice.customer
-    }
-
-    onChange= {
-      (e)=> setNewInvoice({
-        ...newInvoice, customer: e.target.value
-      })
-  }
-
-  style= {
-    posInput
-  }
 
-  /> <input type="text"
-  placeholder="Phone"
-
-  value= {
-    newInvoice.customerPhone
-  }
-
-  onChange= {
-    (e)=> setNewInvoice({
-      ...newInvoice, customerPhone: e.target.value
-    })
+.bill-to-box .customer-detail {
+  font-size: 12px;
+  color: #374151;
+  margin: 2px 0;
 }
 
-style= {
-    {
-    ...posInput, width: '110px'
-  }
+/* Payment info */
+.payment-info-box {
+  min-width: 180px;
+  text-align: right;
 }
-
-/> </div>) : (<> <div>CUSTOMER: <strong> {
-    inv.customerName || inv.customer || 'Walk-in Customer'
-  }
-
-  </strong></div> {
-    inv.customerPhone && <div>MOBILE: {
-      inv.customerPhone
-    }
 
-    </div>
-  }
-
-  </>)
+.payment-info-box .pay-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #6b7280;
+  display: block;
+  margin-bottom: 6px;
 }
 
-</div> </div> <div style= {
-    {
-    borderBottom: '1px dashed #000', margin: '6px 0'
-  }
+.payment-info-box .pay-method {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
 }
 
-></div> {
-  /* Items Header */
+.pay-badge {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
 }
+.pay-badge.paid    { background: #dcfce7; color: #15803d; }
+.pay-badge.unpaid  { background: #fee2e2; color: #dc2626; }
+.pay-badge.partial { background: #fef3c7; color: #b45309; }
 
-<table style= {
-    {
-    width: '100%', borderCollapse: 'collapse', fontSize: '11.5px'
-  }
+/* ---- Items Table ---- */
+.paper-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 24px;
+  font-size: 12.5px;
 }
 
-> <thead> <tr style= {
-    {
-    borderBottom: '1px dashed #000', textAlign: 'left'
-  }
+.paper-table thead tr th {
+  padding: 10px 10px;
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #ffffff;
+  border: none;
 }
 
-> <th style= {
-    {
-    width: '44%', paddingBottom: '4px'
-  }
+.paper-table thead tr th:last-child,
+.paper-table tbody tr td:last-child {
+  text-align: right;
 }
-
->ITEM</th> <th style= {
-    {
-    width: '14%', textAlign: 'center', paddingBottom: '4px'
-  }
+.paper-table thead tr th:nth-child(3),
+.paper-table thead tr th:nth-child(4),
+.paper-table tbody tr td:nth-child(3),
+.paper-table tbody tr td:nth-child(4) {
+  text-align: center;
 }
 
->QTY</th> <th style= {
-    {
-    width: '20%', textAlign: 'right', paddingBottom: '4px'
-  }
+.paper-table tbody tr td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  color: #111827;
+  vertical-align: top;
 }
 
->RATE</th> <th style= {
-    {
-    width: '22%', textAlign: 'right', paddingBottom: '4px'
-  }
+.paper-table tbody tr:nth-child(even) td {
+  background: #f9fafb;
 }
 
->AMT</th> </tr> </thead> <tbody> {
-  itemsList.map((it, idx)=> (<tr key= {
-        it.id || idx
-      }
-
-      style= {
-          {
-          verticalAlign: 'top'
-        }
-      }
-
-      > <td style= {
-          {
-          paddingTop: '5px', paddingRight: '4px'
-        }
-      }
-
-      > {
-        isEditable ? (<> {
-            products.length > 0 && (<select value= {
-                it.productId || ''
-              }
-
-              onChange= {
-                (e)=> handleProductSelect(it.id, e.target.value)
-              }
-
-              style= {
-                  {
-                  ...posInput, marginBottom: '2px', fontSize: '10px'
-                }
-              }
-
-              > <option value="" >-- Pick Item --</option> {
-                products.map(p=> <option key= {
-                    p._id
-                  }
-
-                  value= {
-                    p._id
-                  }
-
-                  > {
-                    p.name
-                  }
-
-                  (₹ {
-                      p.price
-                    })</option>)
-              }
-
-              </select>)
-          }
-
-          <input type="text"
-          placeholder="Item Name"
-
-          value= {
-            it.name
-          }
-
-          onChange= {
-            (e)=> handleItemChange(it.id, 'name', e.target.value)
-          }
-
-          style= {
-            posInput
-          }
-
-          /> </>) : (<div style= {
-              {
-              fontWeight: 700
-            }
-          }
-
-          > {
-            idx + 1
-          }
-
-          . {
-            it.name
-          }
-
-          </div>)
-      }
-
-      </td> <td style= {
-          {
-          paddingTop: '5px', textAlign: 'center'
-        }
-      }
-
-      > {
-        isEditable ? (<input type="number"
-          min="1"
-
-          value= {
-            it.qty
-          }
-
-          onChange= {
-            (e)=> handleItemChange(it.id, 'qty', e.target.value)
-          }
-
-          style= {
-              {
-              ...posInput, textAlign: 'center'
-            }
-          }
-
-          />) : Number(it.qty || 1)
-      }
-
-      </td> <td style= {
-          {
-          paddingTop: '5px', textAlign: 'right'
-        }
-      }
-
-      > {
-        isEditable ? (<input type="number"
-          min="0"
-
-          value= {
-            it.rate
-          }
-
-          onChange= {
-            (e)=> handleItemChange(it.id, 'rate', e.target.value)
-          }
-
-          style= {
-              {
-              ...posInput, textAlign: 'right'
-            }
-          }
-
-          />) : Number(it.rate || 0).toFixed(2)
-      }
-
-      </td> <td style= {
-          {
-          paddingTop: '5px', textAlign: 'right', fontWeight: 700
-        }
-      }
-
-      > {
-        Number(it.amount || ((it.qty || 1) * (it.rate || 0))).toFixed(2)
-      }
-
-        {
-        isEditable && itemsList.length > 1 && (<button onClick= {
-            ()=> handleRemoveItem(it.id)
-          }
-
-          style= {
-              {
-              background: 'none', border: 'none', color: 'red', cursor: 'pointer', marginLeft: '2px'
-            }
-          }
-
-          >×</button>)
-      }
-
-      </td> </tr>))
-}
-
-</tbody> </table> {
-  isEditable && (<div style= {
-        {
-        marginTop: '8px'
-      }
-    }
-
-    > <button onClick= {
-      handleAddItem
-    }
-
-    style= {
-        {
-        width: '100%', padding: '4px', background: '#000', color: '#fff', border: 'none', fontFamily: 'inherit', fontSize: '11px', fontWeight: 700, cursor: 'pointer'
-      }
-    }
-
-    > + ADD POS ITEM </button> </div>)
-}
-
-<div style= {
-    {
-    borderBottom: '1px dashed #000', margin: '8px 0'
-  }
+.paper-table tbody tr td .item-name {
+  font-weight: 600;
+  color: #111827;
+  display: block;
 }
-
-></div> {
-  /* Totals Section */
+.paper-table tbody tr td .item-desc {
+  font-size: 11px;
+  color: #6b7280;
+  display: block;
+  margin-top: 2px;
 }
 
-<div style= {
-    {
-    fontSize: '11.5px', lineHeight: '1.5'
-  }
+/* ---- Paper Footer / Totals ---- */
+.paper-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2rem;
+  margin-top: 16px;
 }
 
-> <div style= {
-    {
-    display: 'flex', justifyContent: 'space-between'
-  }
+.terms-area {
+  flex: 1;
+  font-size: 11.5px;
 }
 
-> <span>Items: {
-  itemsList.length
+.terms-area h4 {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #374151;
+  margin-bottom: 6px;
 }
 
-| Total Qty: {
-  totalQty
+.terms-area ol {
+  padding-left: 16px;
+  color: #6b7280;
+  margin: 0 0 10px;
+  line-height: 1.8;
 }
 
-</span> <span>SubTotal: ₹ {
-  subVal.toFixed(2)
+.terms-area .thankyou-note {
+  font-weight: 600;
+  color: #15803d;
+  font-size: 12px;
+  margin-top: 10px;
 }
 
-</span> </div> <div style= {
-    {
-    display: 'flex', justifyContent: 'space-between'
-  }
+.paper-totals {
+  width: 280px;
+  flex-shrink: 0;
 }
 
-> <span>CGST ({
-  (taxRateVal / 2).toFixed(1)
+.p-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: #374151;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.p-total-row:first-child { border-top: 1px solid #e5e7eb; }
+
+.p-total-row span:last-child {
+  font-weight: 600;
+  text-align: right;
+}
+
+.p-grand-total {
+  padding: 10px 12px !important;
+  border: none !important;
+  font-size: 14px !important;
+  font-weight: 800 !important;
+  border-radius: 0 0 6px 6px;
+  color: #fff !important;
+}
+
+.p-grand-total span { color: #fff !important; }
+
+.sign-area {
+  text-align: center;
+  margin-top: 28px;
+  padding-top: 10px;
+  border-top: 1px solid #9ca3af;
+  width: 180px;
+  font-size: 11px;
+  color: #374151;
+  margin-left: auto;
 }
-
-%):</span> <span>₹ {
-  (taxAmt / 2).toFixed(2)
+
+.sign-area p {
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin: 5px 0 0;
 }
 
-</span> </div> <div style= {
-    {
-    display: 'flex', justifyContent: 'space-between'
-  }
+/* CGST/SGST breakdown row */
+.tax-breakup-row,
+.tax-split {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 12px;
+  font-size: 11.5px;
+  color: #6b7280;
+  border-bottom: 1px dashed #e5e7eb;
 }
 
-> <span>SGST ({
-  (taxRateVal / 2).toFixed(1)
+/* Invoice header meta rows */
+.meta-row {
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 4px;
+  font-size: 13px;
+  align-items: center;
 }
 
-%):</span> <span>₹ {
-  (taxAmt / 2).toFixed(2)
+.meta-label {
+  min-width: 90px;
+  color: #6b7280;
+  font-weight: 500;
+  font-size: 12.5px;
 }
 
-</span> </div> <div style= {
-    {
-    borderBottom: '1px dashed #000', margin: '6px 0'
-  }
+/* Print root wrapper */
+.invoice-paper-print-root {
+  /* transparent wrapper for print isolation */
 }
 
-></div> <div style= {
-    {
-    display: 'flex', justifyContent: 'space-between', fontSize: '15px', fontWeight: 900
-  }
-}
 
-> <span>NET AMOUNT:</span> <span>₹ {
-  Math.round(totalVal).toLocaleString('en-IN')
+/* Paid watermark */
+.watermark-paid {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-30deg);
+  font-size: 80px;
+  font-weight: 900;
+  color: rgba(22, 163, 74, 0.06);
+  pointer-events: none;
+  user-select: none;
+  letter-spacing: 4px;
+  z-index: 0;
+  text-transform: uppercase;
 }
 
-.00</span> </div> <div style= {
-    {
-    borderBottom: '1px dashed #000', margin: '6px 0'
-  }
+/* ============================================================
+   THERMAL RECEIPT LAYOUT
+   ============================================================ */
+.thermal-wrapper {
+  max-width: 320px;
+  margin: 0 auto;
+  font-family: 'Courier New', Courier, monospace;
+  background: #ffffff;
+  color: #000000;
+  padding: 20px 16px;
+  border-radius: 8px;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-></div> </div> {
-  /* Barcode & Footer */
+.thermal-header {
+  text-align: center;
+  border-bottom: 2px dashed #000;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
 }
 
-<div style= {
-    {
-    textAlign: 'center', marginTop: '10px', fontSize: '11px'
-  }
+.thermal-header h3 {
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin: 0 0 4px;
 }
 
-> <div style= {
-    {
-    fontFamily: "'Libre Barcode 39', monospace", fontSize: '22px', letterSpacing: '3px', margin: '6px 0', fontWeight: 900
-  }
+.thermal-header p {
+  font-size: 11px;
+  margin: 2px 0;
 }
 
-> ||| || ||| | |||| ||| || ||| </div> <div style= {
-    {
-    fontSize: '10px', letterSpacing: '2px', marginBottom: '6px'
-  }
+.thermal-info {
+  border-bottom: 1px dashed #000;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  font-size: 12px;
 }
 
->* {
-  invNum
+.thermal-info-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 2px 0;
 }
 
-*</div> <div style= {
-    {
-    fontWeight: 700
-  }
+.thermal-info-row .tlabel {
+  font-weight: 700;
+  white-space: nowrap;
+  margin-right: 8px;
 }
 
-> {
-  inv.notes || 'THANK YOU! VISIT AGAIN!'
+.thermal-items table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
 }
 
-</div> <div style= {
-    {
-    fontSize: '10px', marginTop: '3px'
-  }
+.thermal-items thead tr {
+  border-bottom: 1px dashed #000;
 }
 
->Goods once sold will not be taken back.</div> </div> </div> </div>);
+.thermal-items th {
+  padding: 4px 2px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
 }
-
-;
-
-// ============================================================================
-// 2. EXACT ZOHO A4 BLUE CORPORATE SHEET
-// ============================================================================
-const renderZohoSheet=(isEditable)=> {
-  const inv=isEditable ? newInvoice : (selectedInvoice || invoices[0] || {});
-
-  const invNum=isEditable ? (newInvoice.id || `INV-$ {
-      String(invoices.length + 1).padStart(6, '0')
-    }
-
-    `) : (inv.invoiceNumber || inv.id || 'INV-000001');
-  const itemsList=isEditable ? newInvoice.items : (inv.items || []);
-  const subVal=isEditable ? subtotal : Number(inv.subtotal || 0);
-  const taxRateVal=isEditable ? avgTaxRate : Number(inv.taxRate ?? inv.items?.[0]?.taxRate ?? 5);
-  const totalVal=isEditable ? grandTotal : Number(inv.grandTotal || inv.totalAmount || 0);
-  const balanceVal=isEditable ? (newInvoice.paymentStatus==='Paid' ? 0 : grandTotal) : Number(inv.balanceAmount ?? totalVal);
 
-  const formatDate=(d)=> {
-    if ( !d) return '05 Aug 2026';
-    const dt=new Date(d);
+.thermal-items th:last-child { text-align: right; }
+.thermal-items th:nth-child(2) { text-align: center; }
+.thermal-items th:nth-child(3) { text-align: right; }
 
-    return isNaN(dt) ? d : dt.toLocaleDateString('en-GB', {
-      day: '2-digit', month: 'short', year: 'numeric'
-    });
+.thermal-items tbody td {
+  padding: 4px 2px;
+  font-size: 12px;
+  vertical-align: top;
 }
 
-;
+.thermal-items tbody td:last-child { text-align: right; font-weight: 700; }
+.thermal-items tbody td:nth-child(2) { text-align: center; }
+.thermal-items tbody td:nth-child(3) { text-align: right; }
 
-const cellInputStyle= {
-  width: '100%',
-    border: '1px dashed #94a3b8',
-    background: '#f8fafc',
-    padding: '4px 6px',
-    fontSize: '13px',
-    color: '#111827',
-    borderRadius: '3px',
-    boxSizing: 'border-box'
+.thermal-items tbody tr {
+  border-bottom: 1px dotted #ccc;
 }
-
-;
-
-return (<div className="printable-area-wrapper" style= {
-      {
-      maxWidth: '850px', margin: '0 auto', fontFamily: 'Arial, Helvetica, sans-serif'
-    }
-  }
-
-  > <div className="print-Receipt-sheet" style= {
-      {
-      background: '#ffffff', padding: '55px 45px 45px', borderRadius: '6px', boxShadow: '0 10px 30px rgba(0,0,0,0.1)', position: 'relative', color: '#111827', minHeight: '980px', boxSizing: 'border-box'
-    }
-  }
-
-  > <GeometricCorner /> <div style= {
-      {
-      border: '1.5px solid #222222', minHeight: '860px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
-    }
-  }
-
-  > <div> {
-    /* Header */
-  }
-
-  <div style= {
-      {
-      display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '18px 16px', borderBottom: '1px solid #222222'
-    }
-  }
-
-  > <div style= {
-      {
-      lineHeight: '1.45', fontSize: '12.5px', color: '#333333'
-    }
-  }
-
-  > <div style= {
-      {
-      fontSize: '19px', fontWeight: 700, color: '#000000', marginBottom: '4px'
-    }
-  }
-
-  > {
-    companyName
-  }
-
-  </div> <div style= {
-      {
-      whiteSpace: 'pre-line'
-    }
-  }
 
-  > {
-    companyAddress
-  }
-
-  </div> <div> {
-    companyCityState
-  }
-
-  </div> <div>India</div> {
-    user?.gstin && <div>GSTIN: {
-      user.gstin
-    }
-
-    </div>
-  }
-
-  </div> <div style= {
-      {
-      paddingTop: '14px'
-    }
-  }
+.thermal-totals {
+  border-top: 1px dashed #000;
+  padding-top: 8px;
+  margin-top: 4px;
+  font-size: 13px;
+}
 
-  > <span style= {
-      {
-      fontSize: '36px', fontWeight: 400, color: '#0b4ea2', letterSpacing: '2px'
-    }
-  }
+.thermal-total-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 3px 0;
+}
 
-  > INVOICE </span> </div> </div> {
-    /* Meta */
-  }
+.thermal-grand {
+  font-weight: 900;
+  font-size: 15px;
+  border-top: 1px dashed #000;
+  padding-top: 6px;
+  margin-top: 4px;
+}
 
-  <div style= {
-      {
-      display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #222222', fontSize: '12.5px'
-    }
-  }
+.thermal-footer {
+  text-align: center;
+  border-top: 1px dashed #000;
+  padding-top: 10px;
+  margin-top: 12px;
+  font-size: 11px;
+}
 
-  > <div style= {
-      {
-      padding: '10px 16px', borderRight: '1px solid #222222', lineHeight: '1.75'
-    }
-  }
+/* ---- Short aliases for JSX thermal classes ---- */
+.t-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 3px 0;
+}
 
-  > <div style= {
-      {
-      display: 'flex', alignItems: 'center'
-    }
-  }
+.tlabel {
+  font-weight: 700;
+  white-space: nowrap;
+  margin-right: 6px;
+}
 
-  > <span style= {
-      {
-      width: '115px', color: '#333'
-    }
-  }
+.t-table {
+  width: 100%;
+  font-size: 12px;
+  border-collapse: collapse;
+  margin: 4px 0;
+}
 
-  >Invoice#</span> <strong style= {
-      {
-      flex: 1
-    }
-  }
+.t-table th {
+  padding: 3px 2px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 800;
+  border-bottom: 1px dashed #000;
+}
 
-  > {
-    isEditable ? (<input type="text" value= {
-        newInvoice.id
-      }
-
-      placeholder= {
-        invNum
-      }
-
-      onChange= {
-        (e)=> setNewInvoice({
-          ...newInvoice, id: e.target.value
-        })
-    }
-
-    style= {
-        {
-        ...cellInputStyle, fontWeight: 700
-      }
-    }
-
-    />) : `: $ {
-    invNum
-  }
+.t-table th:last-child, .t-table td:last-child { text-align: right; font-weight: 700; }
+.t-table th:nth-child(2), .t-table td:nth-child(2) { text-align: center; }
 
-  `
+.t-table td {
+  padding: 3px 2px;
+  border-bottom: 1px dotted #ccc;
 }
 
-</strong> </div> <div style= {
-    {
-    display: 'flex', alignItems: 'center'
-  }
+.t-totals {
+  border-top: 1px dashed #000;
+  padding-top: 6px;
+  margin-top: 4px;
+  font-size: 13px;
 }
 
-> <span style= {
-    {
-    width: '115px', color: '#333'
-  }
+.t-grand {
+  font-weight: 900;
+  font-size: 15px;
+  border-top: 1px dashed #000;
+  padding-top: 5px;
+  margin-top: 3px;
 }
 
->Invoice Date</span> <strong style= {
-    {
-    flex: 1
-  }
+.t-footer {
+  text-align: center;
+  border-top: 1px dashed #000;
+  padding-top: 8px;
+  margin-top: 10px;
+  font-size: 10px;
 }
-
-> {
-  isEditable ? (<input type="date" value= {
-      newInvoice.date
-    }
-
-    onChange= {
-      (e)=> setNewInvoice({
-        ...newInvoice, date: e.target.value
-      })
-  }
 
-  style= {
-    cellInputStyle
-  }
 
-  />) : `: $ {
-  formatDate(inv.date)
+/* ============================================================
+   INVOICE CREATE FORM
+   ============================================================ */
+.invoice-form-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
 
-`
+.inv-form-header {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
-</strong> </div> <div style= {
-    {
-    display: 'flex', alignItems: 'center'
-  }
+.customer-selection {
+  min-width: 300px;
+  flex: 1;
 }
 
-> <span style= {
-    {
-    width: '115px', color: '#333'
-  }
+.customer-selection label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
->Terms</span> <strong style= {
-    {
-    flex: 1
-  }
+.large-select {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border-radius: 8px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.93rem;
+  margin-bottom: 0.5rem;
+  transition: border-color 0.2s;
 }
-
-> {
-  isEditable ? (<input type="text" value= {
-      newInvoice.termsLabel
-    }
-
-    onChange= {
-      (e)=> setNewInvoice({
-        ...newInvoice, termsLabel: e.target.value
-      })
-  }
-
-  style= {
-    cellInputStyle
-  }
 
-  />) : `: $ {
-  inv.termsLabel || 'Due on Receipt'
+.large-select:focus {
+  outline: none;
+  border-color: #7c3aed;
 }
 
-`
+.inv-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+  flex: 1;
 }
 
-</strong> </div> <div style= {
-    {
-    display: 'flex', alignItems: 'center'
-  }
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
-> <span style= {
-    {
-    width: '115px', color: '#333'
-  }
+.input-group label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
 }
 
->Due Date</span> <strong style= {
-    {
-    flex: 1
-  }
+.input-group input,
+.input-group select,
+.input-group textarea {
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  transition: border-color 0.2s;
+  width: 100%;
 }
-
-> {
-  isEditable ? (<input type="date" value= {
-      newInvoice.dueDate
-    }
-
-    onChange= {
-      (e)=> setNewInvoice({
-        ...newInvoice, dueDate: e.target.value
-      })
-  }
-
-  style= {
-    cellInputStyle
-  }
 
-  />) : `: $ {
-  formatDate(inv.dueDate)
+.input-group input:focus,
+.input-group select:focus,
+.input-group textarea:focus {
+  outline: none;
+  border-color: #7c3aed;
 }
 
-`
+/* ---- Line Items Table ---- */
+.inv-items-section {
+  overflow-x: auto;
 }
 
-</strong> </div> </div> <div></div> </div> {
-  /* Bill To / Ship To */
+.inv-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 680px;
 }
 
-<div style= {
-    {
-    display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#f1f5f9', borderBottom: '1px solid #222222', fontSize: '12.5px', fontWeight: 700
-  }
+.inv-items-table th {
+  padding: 0.7rem 0.8rem;
+  background: var(--hover-bg);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 2px solid var(--border-color);
 }
 
-> <div style= {
-    {
-    padding: '5px 16px', borderRight: '1px solid #222222'
-  }
+.inv-items-table td {
+  padding: 0.6rem 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
 }
 
->Bill To</div> <div style= {
-    {
-    padding: '5px 16px'
-  }
+.item-input,
+.item-sub-input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  transition: border-color 0.2s;
 }
 
->Ship To</div> </div> <div style= {
-    {
-    display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #222222', fontSize: '12.5px', lineHeight: '1.5'
-  }
+.item-input:focus,
+.item-sub-input:focus {
+  outline: none;
+  border-color: #7c3aed;
 }
 
-> <div style= {
-    {
-    padding: '10px 16px', borderRight: '1px solid #222222'
-  }
+.num-input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  text-align: right;
+  transition: border-color 0.2s;
 }
 
-> {
-  isEditable ? (<div style= {
-        {
-        display: 'flex', flexDirection: 'column', gap: '6px'
-      }
-    }
-
-    > {
-      customers.length > 0 && (<select onChange= {
-          (e)=> handleCustomerSelect(e.target.value)
-        }
-
-        value= {
-          newInvoice.customer
-        }
-
-        style= {
-          cellInputStyle
-        }
-
-        > <option value="" >-- Choose Saved Customer --</option> {
-          customers.map(c=> <option key= {
-              c._id
-            }
-
-            value= {
-              c.name
-            }
-
-            > {
-              c.name
-            }
-
-            </option>)
-        }
-
-        </select>)
-    }
-
-    <input type="text" placeholder="Customer / Party Name *" value= {
-      newInvoice.customer
-    }
-
-    onChange= {
-      (e)=> setNewInvoice({
-        ...newInvoice, customer: e.target.value
-      })
-  }
+.num-input:focus { outline: none; border-color: #7c3aed; }
 
-  style= {
-      {
-      ...cellInputStyle, fontWeight: 700
-    }
-  }
+.tax-select {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  transition: border-color 0.2s;
+}
 
-  /> <textarea rows="2" placeholder="Billing Street, City, State & PIN" value= {
-    newInvoice.customerAddress
-  }
+.tax-select:focus { outline: none; border-color: #7c3aed; }
 
-  onChange= {
-    (e)=> setNewInvoice({
-      ...newInvoice, customerAddress: e.target.value, shipToAddress: e.target.value
-    })
+.item-amount {
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 0.9rem;
 }
 
-style= {
-  cellInputStyle
+.add-row-btn {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1.25rem;
+  border: 2px dashed var(--border-color);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.2s;
 }
 
-/> <input type="text" placeholder="Phone / GSTIN (Optional)" value= {
-  newInvoice.customerPhone
+.add-row-btn:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.04);
 }
 
-onChange= {
-  (e)=> setNewInvoice({
-    ...newInvoice, customerPhone: e.target.value
-  })
+/* ---- Invoice Footer / Totals ---- */
+.inv-form-footer {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
 }
 
-style= {
-  cellInputStyle
+.inv-notes {
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
-
-/> </div>) : (<> <div style= {
-      {
-      fontWeight: 700, color: '#000', fontSize: '13.5px'
-    }
-  }
-
-  > {
-    inv.customerName || inv.customer
-  }
-
-  </div> <div style= {
-      {
-      whiteSpace: 'pre-line', color: '#333'
-    }
-  }
-
-  > {
-    inv.customerAddress || 'Customer Address'
-  }
-
-  </div> {
-    inv.customerPhone && <div>Phone: {
-      inv.customerPhone
-    }
-
-    </div>
-  }
-
-    {
-    inv.customerGstin && <div>GSTIN: {
-      inv.customerGstin
-    }
-
-    </div>
-  }
 
-  </>)
+.inv-totals {
+  width: 300px;
+  flex-shrink: 0;
+  background: var(--hover-bg);
+  border-radius: 12px;
+  padding: 1.2rem 1.4rem;
 }
 
-</div> <div style= {
-    {
-    padding: '10px 16px'
-  }
+.total-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.45rem 0;
+  font-size: 0.93rem;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  align-items: center;
 }
-
-> {
-  isEditable ? (<textarea rows="4" placeholder="Shipping Address (Leave same or edit)" value= {
-      newInvoice.shipToAddress
-    }
-
-    onChange= {
-      (e)=> setNewInvoice({
-        ...newInvoice, shipToAddress: e.target.value
-      })
-  }
-
-  style= {
-    cellInputStyle
-  }
-
-  />) : (<> <div style= {
-      {
-      whiteSpace: 'pre-line', color: '#333'
-    }
-  }
-
-  > {
-    inv.shipToAddress || inv.customerAddress || inv.customerName || 'Same as Billing Address'
-  }
-
-  </div> {
-    inv.customerPhone && <div>Phone: {
-      inv.customerPhone
-    }
 
-    </div>
-  }
-
-  </>)
+.total-row.grand-total {
+  font-size: 1.1rem;
+  font-weight: 800;
+  border-bottom: none;
+  padding-top: 0.7rem;
+  color: var(--text-primary);
 }
 
-</div> </div> {
-  /* Items Table */
+.discount-input {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
 }
 
-<table style= {
-    {
-    width: '100%', borderCollapse: 'collapse', fontSize: '12.5px'
-  }
+.discount-input input {
+  width: 80px;
+  padding: 0.3rem 0.5rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  text-align: right;
 }
 
-> <thead> <tr style= {
-    {
-    background: '#0b4ea2', color: '#ffffff', fontWeight: 700
-  }
+.discount-input select {
+  padding: 0.3rem 0.4rem;
+  border-radius: 6px;
+  border: 1.5px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.88rem;
 }
 
-> <th style= {
-    {
-    width: '6%', padding: '8px', textAlign: 'center', borderRight: '1px solid #222222', borderBottom: '1px solid #222222'
-  }
+/* ---- Search & Filter ---- */
+.search-filter {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
->#</th> <th style= {
-    {
-    width: '52%', padding: '8px 12px', textAlign: 'left', borderRight: '1px solid #222222', borderBottom: '1px solid #222222'
-  }
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--hover-bg);
+  border: 1.5px solid var(--border-color);
+  border-radius: 10px;
+  padding: 0.5rem 1rem;
+  min-width: 260px;
 }
 
->Item &amp; Description</th> <th style= {
-    {
-    width: '12%', padding: '8px', textAlign: 'right', borderRight: '1px solid #222222', borderBottom: '1px solid #222222'
-  }
+.search-box input {
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  flex: 1;
 }
 
->Qty</th> <th style= {
-    {
-    width: '14%', padding: '8px', textAlign: 'right', borderRight: '1px solid #222222', borderBottom: '1px solid #222222'
-  }
+/* ---- Metric Cards ---- */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.25rem;
 }
 
->Rate</th> <th style= {
-    {
-    width: '16%', padding: '8px 12px', textAlign: 'right', borderBottom: '1px solid #222222'
-  }
+.metric-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  transition: transform 0.2s, box-shadow 0.2s;
 }
 
->Amount</th> </tr> </thead> <tbody> {
-  itemsList.map((it, idx)=> (<tr key= {
-        it.id || idx
-      }
-
-      style= {
-          {
-          borderBottom: '1px solid #222222', verticalAlign: 'top'
-        }
-      }
-
-      > <td style= {
-          {
-          padding: '10px 8px', textAlign: 'center', borderRight: '1px solid #222222'
-        }
-      }
-
-      > {
-        idx + 1
-      }
-
-        {
-        isEditable && itemsList.length > 1 && (<button onClick= {
-            ()=> handleRemoveItem(it.id)
-          }
-
-          style= {
-              {
-              display: 'block', margin: '4px auto 0', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer'
-            }
-          }
-
-          > <Trash2 size= {
-            13
-          }
-
-          /> </button>)
-      }
-
-      </td> <td style= {
-          {
-          padding: '10px 12px', borderRight: '1px solid #222222'
-        }
-      }
-
-      > {
-        isEditable ? (<div style= {
-              {
-              display: 'flex', flexDirection: 'column', gap: '4px'
-            }
-          }
-
-          > {
-            products.length > 0 && (<select value= {
-                it.productId || ''
-              }
-
-              onChange= {
-                (e)=> handleProductSelect(it.id, e.target.value)
-              }
-
-              style= {
-                cellInputStyle
-              }
-
-              > <option value="" >-- Pick from Inventory --</option> {
-                products.map(p=> <option key= {
-                    p._id
-                  }
-
-                  value= {
-                    p._id
-                  }
-
-                  > {
-                    p.name
-                  }
-
-                  (₹ {
-                      p.price
-                    })</option>)
-              }
-
-              </select>)
-          }
-
-          <input type="text" placeholder="Item Name (e.g. Camera)" value= {
-            it.name
-          }
-
-          onChange= {
-            (e)=> handleItemChange(it.id, 'name', e.target.value)
-          }
-
-          style= {
-              {
-              ...cellInputStyle, fontWeight: 700
-            }
-          }
-
-          /> <input type="text" placeholder="Description (e.g. DSLR camera)" value= {
-            it.description
-          }
-
-          onChange= {
-            (e)=> handleItemChange(it.id, 'description', e.target.value)
-          }
-
-          style= {
-              {
-              ...cellInputStyle, fontSize: '11.5px', color: '#555'
-            }
-          }
-
-          /> </div>) : (<> <div style= {
-              {
-              fontWeight: 600, color: '#000', fontSize: '13px'
-            }
-          }
-
-          > {
-            it.name
-          }
-
-          </div> {
-            it.description && <div style= {
-                {
-                color: '#555', fontSize: '11.5px', marginTop: '2px'
-              }
-            }
-
-            > {
-              it.description
-            }
-
-            </div>
-          }
-
-          </>)
-      }
-
-      </td> <td style= {
-          {
-          padding: '10px 8px', textAlign: 'right', borderRight: '1px solid #222222'
-        }
-      }
-
-      > {
-        isEditable ? (<input type="number" min="1" value= {
-            it.qty
-          }
-
-          onChange= {
-            (e)=> handleItemChange(it.id, 'qty', e.target.value)
-          }
-
-          style= {
-              {
-              ...cellInputStyle, textAlign: 'right'
-            }
-          }
-
-          />) : (<> <div> {
-            Number(it.qty || 1).toFixed(2)
-          }
-
-          </div> <div style= {
-              {
-              fontSize: '11.5px', color: '#444'
-            }
-          }
-
-          > {
-            it.unit || 'Piece'
-          }
-
-          </div> </>)
-      }
-
-      </td> <td style= {
-          {
-          padding: '10px 8px', textAlign: 'right', borderRight: '1px solid #222222'
-        }
-      }
-
-      > {
-        isEditable ? (<input type="number" min="0" value= {
-            it.rate
-          }
-
-          onChange= {
-            (e)=> handleItemChange(it.id, 'rate', e.target.value)
-          }
-
-          style= {
-              {
-              ...cellInputStyle, textAlign: 'right'
-            }
-          }
-
-          />) : (Number(it.rate || 0).toLocaleString('en-IN', {
-            minimumFractionDigits: 2, maximumFractionDigits: 2
-          }))
-    }
-
-    </td> <td style= {
-        {
-        padding: '10px 12px', textAlign: 'right', fontWeight: 600
-      }
-    }
-
-    > {
-      Number(it.amount || ((it.qty || 1) * (it.rate || 0))).toLocaleString('en-IN', {
-        minimumFractionDigits: 2, maximumFractionDigits: 2
-      })
-  }
+.metric-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+}
 
-  </td> </tr>))
+.metric-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
 }
 
-</tbody> </table> {
-  isEditable && (<div style= {
-        {
-        padding: '8px 12px', borderBottom: '1px solid #222222', background: '#f8fafc'
-      }
-    }
+.bg-green  { background: linear-gradient(135deg, #16a34a, #4ade80); }
+.bg-blue   { background: linear-gradient(135deg, #2563eb, #60a5fa); }
+.bg-orange { background: linear-gradient(135deg, #ea580c, #fb923c); }
+.bg-purple { background: linear-gradient(135deg, #7c3aed, #a78bfa); }
 
-    > <button onClick= {
-      handleAddItem
-    }
+.metric-info h4 { font-size: 0.85rem; color: var(--text-secondary); font-weight: 500; margin-bottom: 4px; }
+.metric-value { font-size: 1.4rem; font-weight: 800; line-height: 1; }
+.metric-trend { font-size: 0.78rem; margin-top: 4px; color: var(--text-secondary); }
+.metric-trend.positive { color: #16a34a; }
+.metric-trend.negative { color: #ef4444; }
 
-    style= {
-        {
-        background: '#e0f2fe', color: '#0369a1', border: '1px solid #7dd3fc', padding: '4px 12px', borderRadius: '4px', fontWeight: 700, fontSize: '12px', cursor: 'pointer'
-      }
-    }
+.text-orange { color: #ea580c !important; }
 
-    > + Add Another Item Row </button> </div>)
+/* Table container */
+.table-container {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
 }
 
-  {
-  /* Sub Total */
+.inv-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-<div style= {
-    {
-    display: 'grid', gridTemplateColumns: '84% 16%', borderBottom: '1px solid #222222', fontSize: '12.5px'
-  }
+.section-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
-> <div style= {
-    {
-    padding: '6px 12px', textAlign: 'right', fontWeight: 700, borderRight: '1px solid #222222'
-  }
+.tabs-simple {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tab-simple {
+  padding: 0.45rem 1rem;
+  border: 1.5px solid var(--border-color);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 500;
+  cursor: pointer;
+  font-size: 0.88rem;
+  transition: all 0.2s;
+}
+
+.tab-simple:hover { background: var(--hover-bg); }
+.tab-simple.active {
+  background: linear-gradient(135deg, #6b21a8, #3b82f6);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* Sub text / date cell */
+.sub-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.action-btn {
+  background: var(--hover-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+}
+.action-btn:hover { background: var(--glass-bg); color: var(--text-primary); }
+.action-btn.text-orange { color: #ea580c !important; }
+
+/* ============================================================
+   TEMPLATE — A5 MINIMAL (TEAL)
+   ============================================================ */
+.template-minimal .paper-table thead tr th {
+  background: #0f766e !important;
+}
+.template-minimal .p-grand-total {
+  background: #0f766e !important;
+}
+.template-minimal .section-label-strip {
+  background: #0f766e !important;
+}
+.template-minimal .company-details h1 {
+  color: #0f766e !important;
+}
+.template-minimal .invoice-title-area h2 {
+  color: #0f766e !important;
+}
+
+/* ============================================================
+   NO-PRINT UTILITY (screen-only)
+   ============================================================ */
+@media screen {
+  .no-print { display: unset; }
+}
+
+/* ============================================================
+   BULLETPROOF PRINT ENGINE (A4 Tax Invoice + 80mm Thermal Receipt)
+   ============================================================ */
+@media print {
+  @page {
+    margin: 5mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Keep all ancestor container tree visible and flowable */
+  #root,
+  .app-container,
+  .app-workspace,
+  .invoice-management-wrapper,
+  .inv-preview-view,
+  .main-dashboard-layout,
+  .billing-screen-content,
+  .print-modal-overlay,
+  .print-modal-content,
+  .pos-wrapper,
+  .pos-grid,
+  .pos-right-col {
+    display: block !important;
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    width: 100% !important;
+    visibility: visible !important;
+  }
+
+  /* Hide screen navigation, chrome, sidebars, buttons */
+  .no-print,
+  .inv-header,
+  .nav-brand,
+  .navbar,
+  .nav-bar,
+  .app-sidebar,
+  .sidebar,
+  .top-navbar,
+  .universal-header,
+  .universal-search,
+  .universal-topbar,
+  .mobile-bottom-nav,
+  .mobile-only,
+  .back-btn,
+  .btn-primary,
+  .btn-secondary,
+  .header-actions,
+  .inv-dashboard,
+  .inv-create-view,
+  .bill-format-toggle,
+  .pos-top-bar,
+  .pos-topbar,
+  .pos-left-col,
+  .pos-mid-col,
+  .pos-bottom-actions,
+  .pos-top-actions,
+  .pos-currency-label,
+  .pos-back-btn,
+  .pos-btn-share,
+  .pos-btn-complete,
+  .floating-modules-container,
+  .quick-actions,
+  .metrics-grid,
+  .checkout-actions,
+  .whatsapp-share-btn,
+  .add-row-btn,
+  nav,
+  aside,
+  header,
+  footer {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Image 1: Standard Tax Invoice (A4) */
+  .standard-inv-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .standard-inv-box {
+    border: 1.5pt solid #000 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+    page-break-inside: avoid;
+  }
+
+  .std-table thead th {
+    background: #1e70c9 !important;
+    color: #fff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Image 2: Thermal POS Receipt (80mm) */
+  .thermal-receipt-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 76mm !important;
+    max-width: 76mm !important;
+    margin: 0 auto !important;
+    padding: 2mm 3mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  .th-maroon-banner-1,
+  .th-maroon-banner-2,
+  .th-scan-btn,
+  .th-logo-square {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
+
+
+/* ============================================================
+   AUTHENTIC INVOICE BILL (IMAGE 1) + THERMAL RECEIPT (IMAGE 2)
+   ============================================================ */
+
+/* ── Format Toggle Selector ── */
+.bill-format-toggle {
+  display: inline-flex;
+  background: var(--bg-secondary, #f1f5f9);
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color, #cbd5e1);
+  gap: 4px;
+}
+
+.bill-format-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary, #64748b);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.bill-format-btn:hover {
+  color: var(--text-primary, #0f172a);
+}
+
+.bill-format-btn.active {
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   1. STANDARD TAX INVOICE (IMAGE 1 EXACT MATCH)
+   ══════════════════════════════════════════════════════════════ */
+.standard-inv-container {
+  max-width: 820px;
+  margin: 0 auto 30px auto;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  color: #111827;
+  background: transparent;
+}
+
+.standard-inv-watermark-top {
+  font-size: 11px;
+  font-weight: 700;
+  color: #b97777;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.standard-inv-box {
+  background: #ffffff;
+  border: 1.5px solid #2d3748;
+  border-radius: 2px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+/* Header: Company details */
+.std-header-section {
+  padding: 20px 24px 16px 24px;
+  border-bottom: 1.5px solid #2d3748;
+}
+
+.std-company-name {
+  color: #1e70c9;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  letter-spacing: -0.3px;
+}
+
+.std-header-text {
+  font-size: 13px;
+  color: #1f2937;
+  margin: 2px 0;
+  line-height: 1.4;
+}
+
+/* Two-column Bill To & Invoice Info */
+.std-meta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1.5px solid #2d3748;
+}
+
+.std-meta-col-left {
+  padding: 12px 20px;
+  border-right: 1.5px solid #2d3748;
+}
+
+.std-meta-col-right {
+  padding: 12px 20px;
+}
+
+.std-section-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: #111827;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.std-meta-line {
+  font-size: 13px;
+  color: #1f2937;
+  margin: 2px 0;
+  line-height: 1.4;
+}
+
+.std-meta-line strong {
+  font-weight: 700;
+}
+
+/* Items Table */
+.std-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.std-table thead th {
+  background: #1e70c9;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 12.5px;
+  padding: 9px 8px;
+  border-right: 1.5px solid #2d3748;
+  border-bottom: 1.5px solid #2d3748;
+  white-space: nowrap;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.std-table thead th:last-child {
+  border-right: none;
+}
+
+.std-table tbody td {
+  padding: 8px 8px;
+  font-size: 13px;
+  color: #111827;
+  border-right: 1.5px solid #2d3748;
+  border-bottom: 1px solid #e5e7eb;
+  vertical-align: middle;
+}
+
+.std-table tbody td:last-child {
+  border-right: none;
+}
+
+.std-item-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.std-item-thumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  flex-shrink: 0;
+}
+
+.std-item-thumb-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 3px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.std-item-name {
+  font-weight: 600;
+  color: #111827;
+}
+
+.std-total-row td {
+  padding: 10px 8px;
+  font-weight: 700;
+  font-size: 13.5px;
+  border-top: 1.5px solid #2d3748;
+  border-bottom: 1.5px solid #2d3748;
+  background: #ffffff;
+}
+
+/* Received & Balance Row */
+.std-received-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1.5px solid #2d3748;
+  font-size: 13px;
+}
+
+.std-received-left {
+  padding: 8px 20px;
+  border-right: 1.5px solid #2d3748;
+}
+
+.std-received-right {
+  padding: 8px 20px;
+}
+
+/* Remark row */
+.std-remark-row {
+  padding: 8px 20px;
+  font-size: 13px;
+  border-bottom: 1.5px solid #2d3748;
+  color: #111827;
+}
+
+.std-remark-row strong {
+  font-weight: 700;
+}
+
+/* Terms & Bank details two columns */
+.std-bottom-row {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+}
+
+.std-terms-col {
+  padding: 14px 20px;
+  border-right: 1.5px solid #2d3748;
+}
+
+.std-terms-col h4 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 10px 0;
+  color: #111827;
+}
+
+.std-terms-col p {
+  font-size: 12px;
+  color: #374151;
+  margin: 8px 0;
+  line-height: 1.45;
+}
+
+.std-bank-col {
+  padding: 14px 20px;
+  position: relative;
+}
+
+.std-bank-col h4 {
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0 0 10px 0;
+  color: #111827;
+}
+
+.std-bank-info-grid {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.std-bank-lines {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #1f2937;
+}
+
+.std-bank-lines div {
+  margin-bottom: 3px;
+}
+
+.std-qr-box {
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.std-qr-img {
+  width: 95px;
+  height: 95px;
+  border: 1px solid #e2e8f0;
+  padding: 2px;
+  background: #ffffff;
+}
+
+.std-qr-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #4b5563;
+  margin-top: 3px;
+}
+
+/* Outer Footer */
+.std-outer-footer {
+  text-align: center;
+  padding: 16px 0 8px 0;
+  color: #64748b;
+  font-size: 11.5px;
 }
-
-> Sub Total </div> <div style= {
-    {
-    padding: '6px 12px', textAlign: 'right', fontWeight: 600
-  }
+
+.std-outer-footer p {
+  margin: 4px 0;
 }
 
-> ₹ {
-  subVal.toLocaleString('en-IN', {
-    minimumFractionDigits: 2, maximumFractionDigits: 2
-  })
-}
 
-</div> </div> {
-  /* Footer Split */
+/* ══════════════════════════════════════════════════════════════
+   2. THERMAL POS RECEIPT (IMAGE 2 EXACT MATCH)
+   ══════════════════════════════════════════════════════════════ */
+.thermal-receipt-container {
+  width: 320px;
+  max-width: 100%;
+  margin: 0 auto 30px auto;
+  background: #ffffff;
+  color: #000000;
+  padding: 20px 16px;
+  border-radius: 4px;
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.12);
+  font-family: 'Courier New', Courier, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
-<div style= {
-    {
-    display: 'grid', gridTemplateColumns: '56% 44%', fontSize: '12px'
-  }
+/* Header */
+.th-header {
+  text-align: center;
+  padding-bottom: 6px;
 }
 
-> <div style= {
-    {
-    padding: '16px', lineHeight: '1.45'
-  }
+.th-logo-square {
+  width: 50px;
+  height: 50px;
+  margin: 0 auto 8px auto;
+  background: linear-gradient(135deg, #0284c7 0%, #1d4ed8 100%);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 10px rgba(2, 132, 199, 0.3);
 }
-
-> {
-  isEditable ? (<div style= {
-        {
-        display: 'flex', flexDirection: 'column', gap: '8px'
-      }
-    }
-
-    > <input type="text" value= {
-      newInvoice.notes
-    }
-
-    onChange= {
-      (e)=> setNewInvoice({
-        ...newInvoice, notes: e.target.value
-      })
-  }
-
-  style= {
-    cellInputStyle
-  }
 
-  /> <textarea rows="3" value= {
-    newInvoice.terms
-  }
-
-  onChange= {
-    (e)=> setNewInvoice({
-      ...newInvoice, terms: e.target.value
-    })
+.th-logo-square svg {
+  width: 32px;
+  height: 32px;
+  color: #ffffff;
 }
 
-style= {
-  cellInputStyle
+.th-company-title {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin: 4px 0 2px 0;
+  color: #000000;
+  font-family: 'Courier New', Courier, monospace;
 }
-
-/> </div>) : (<> <div style= {
-      {
-      marginBottom: '14px', color: '#222'
-    }
-  }
-
-  > {
-    inv.notes || 'Thanks for your business.'
-  }
-
-  </div> <div style= {
-      {
-      color: '#555', fontWeight: 600, marginBottom: '2px'
-    }
-  }
-
-  >Terms &amp; Conditions</div> <div style= {
-      {
-      color: '#222', fontSize: '11.5px'
-    }
-  }
-
-  > {
-    inv.terms || 'Full payment is due upon receipt of this invoice. Late payments may incur additional charges or interest as per the applicable laws.'
-  }
 
-  </div> </>)
+.th-address-line {
+  font-size: 11px;
+  margin: 2px 0;
+  color: #111;
 }
 
-</div> <div> <div style= {
-    {
-    borderLeft: '1px solid #222222', borderBottom: '1px solid #222222', background: '#b6d0f7', padding: '8px 12px', fontSize: '12.5px', lineHeight: '1.85'
-  }
+.th-tagline {
+  font-size: 11.5px;
+  font-weight: 700;
+  margin: 3px 0;
 }
 
-> <div style= {
-    {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-  }
+.th-phone-line {
+  font-size: 11.5px;
+  font-weight: 700;
+  margin: 2px 0;
 }
 
-> <strong style= {
-    {
-    color: '#000'
-  }
+.th-email-line {
+  font-size: 11px;
+  margin: 2px 0;
 }
 
->Tax Rate</strong> {
-  isEditable ? (<select value= {
-      avgTaxRate
-    }
-
-    onChange= {
-      (e)=> {
-        const val=parseFloat(e.target.value) || 0;
-
-        setNewInvoice(prev=> ({
-            ...prev, items: prev.items.map(i=> ({
-                ...i, tax: val
-              }))
-        }));
-  }
+/* Dashed divider */
+.th-dashed-separator {
+  border: none;
+  border-top: 1.2px dashed #000000;
+  margin: 7px 0;
 }
 
-style= {
-    {
-    width: '80px', padding: '2px', fontWeight: 700
-  }
+/* Metadata Key Value Pairs */
+.th-meta-table {
+  width: 100%;
+  font-size: 10.5px;
+  border-collapse: collapse;
 }
-
-> <option value="0" >0.00%</option> <option value="5" >5.00%</option> <option value="12" >12.00%</option> <option value="18" >18.00%</option> <option value="28" >28.00%</option> </select>) : (<strong style= {
-      {
-      color: '#000'
-    }
-  }
-
-  > {
-    taxRateVal.toFixed(2)
-  }
 
-  %</strong>)
+.th-meta-table td {
+  padding: 1px 0;
+  vertical-align: top;
 }
 
-</div> <div style= {
-    {
-    display: 'flex', justifyContent: 'space-between'
-  }
+.th-meta-label {
+  width: 48%;
+  color: #000;
 }
 
-> <strong style= {
-    {
-    color: '#000'
-  }
+.th-meta-val {
+  width: 52%;
+  text-align: right;
+  font-weight: 600;
+  color: #000;
 }
 
->Total</strong> <strong style= {
-    {
-    color: '#000'
-  }
+/* Billing To */
+.th-billing-heading {
+  color: #991b1b;
+  font-weight: 800;
+  font-size: 11.5px;
+  margin-top: 5px;
+  margin-bottom: 2px;
 }
 
->₹ {
-  totalVal.toLocaleString('en-IN', {
-    minimumFractionDigits: 2, maximumFractionDigits: 2
-  })
+/* Items Table */
+.th-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10.5px;
+  margin: 3px 0;
 }
 
-</strong> </div> <div style= {
-    {
-    display: 'flex', justifyContent: 'space-between'
-  }
+.th-items-table thead th {
+  padding: 3px 0;
+  font-weight: 700;
+  border-bottom: 1px dashed #000;
+  text-align: left;
 }
 
-> <strong style= {
-    {
-    color: '#000'
-  }
+.th-items-table thead th.th-right {
+  text-align: right;
 }
 
->Balance Due</strong> <strong style= {
-    {
-    color: '#000'
-  }
+.th-items-table thead th.th-center {
+  text-align: center;
 }
 
->₹ {
-  balanceVal.toLocaleString('en-IN', {
-    minimumFractionDigits: 2, maximumFractionDigits: 2
-  })
+.th-item-main-row td {
+  padding-top: 6px;
+  vertical-align: top;
 }
 
-</strong> </div> </div> </div> </div> </div> <div style= {
-    {
-    height: '80px'
-  }
+.th-item-name {
+  font-weight: 800;
+  font-size: 11px;
 }
-
-></div> </div> </div> </div>);
-}
-
-;
-
-// ============================================================================
-// ACTIVE VIEW CONTROLLER (With Mode Switcher & Isolated Print CSS)
-// ============================================================================
-if (activeView==='create' || activeView==='view') {
-  const isEdit=activeView==='create';
-
-  return (<div style= {
-        {
-        padding: '16px'
-      }
-    }
-
-    > {
-      /* Dedicated Print CSS so Navbar / Buttons NEVER appear in Print PDF */
-    }
-
-    <style> {
-      ` @media print {
-        body * {
-          visibility: hidden !important;
-        }
-
-        .printable-area-wrapper, .printable-area-wrapper * {
-          visibility: visible !important;
-        }
-
-        .printable-area-wrapper {
-          position: absolute !important;
-          left: 0 !important;
-          top: 0 !important;
-          width: 100% !important;
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-
-        .print-Receipt-sheet {
-          box-shadow: none !important;
-          border: none !important;
-        }
-
-        .no-print {
-          display: none !important;
-        }
-      }
-
-      `
-    }
-
-    </style> {
-      /* Top Control Bar */
-    }
-
-    <div className="no-print" style= {
-        {
-        maxWidth: '850px', margin: '0 auto 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '12px 18px', borderRadius: '10px', border: '1px solid #cbd5e1', flexWrap: 'wrap', gap: '10px'
-      }
-    }
-
-    > <button onClick= {
-      ()=> setActiveView('dashboard')
-    }
-
-    style= {
-        {
-        background: 'none', border: 'none', color: '#0b4ea2', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '14px'
-      }
-    }
-
-    > <ArrowLeft size= {
-      16
-    }
-
-    /> All Invoices </button> {
-      /* Switch Between A4 Zoho Invoice & Real POS Thermal Receipt */
-    }
-
-    <div style= {
-        {
-        display: 'flex', background: '#f1f5f9', padding: '4px', borderRadius: '8px', gap: '4px'
-      }
-    }
-
-    > <button type="button"
-
-    onClick= {
-      ()=> setInvoiceStyle('zoho')
-    }
-
-    style= {
-        {
-        padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '13px',
-        display: 'flex', alignItems: 'center', gap: '6px',
-        background: invoiceStyle==='zoho' ? '#0b4ea2' : 'transparent',
-        color: invoiceStyle==='zoho' ? '#fff' : '#334155'
-      }
-    }
-
-    > <FileText size= {
-      15
-    }
-
-    /> A4 Corporate (Zoho) </button> <button type="button"
-    onClick= {
-      ()=> setInvoiceStyle('pos')
-    }
-
-    style= {
-        {
-        padding: '6px 14px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '13px',
-        display: 'flex', alignItems: 'center', gap: '6px',
-        background: invoiceStyle==='pos' ? '#0f172a' : 'transparent',
-        color: invoiceStyle==='pos' ? '#fff' : '#334155'
-      }
-    }
-
-    > <Receipt size= {
-      15
-    }
-
-    /> POS Thermal Receipt </button> </div> <div style= {
-        {
-        display: 'flex', gap: '8px'
-      }
-    }
-
-    > {
-      isEdit ? (<button onClick= {
-          handleSaveInvoice
-        }
-
-        style= {
-            {
-            background: '#16a34a', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '6px', fontWeight: 700, cursor: 'pointer'
-          }
-        }
-
-        > ✓ Save &amp; Preview Bill </button>) : (<> <button onClick= {
-          ()=> setActiveView('create')
-        }
-
-        style= {
-            {
-            background: '#f1f5f9', color: '#334155', border: '1px solid #cbd5e1', padding: '8px 14px', borderRadius: '6px', fontWeight: 600, cursor: 'pointer'
-          }
-        }
-
-        > + Create New </button> <button onClick= {
-          ()=> window.print()
-        }
-
-        style= {
-            {
-            background: '#0b4ea2', color: '#fff', border: 'none', padding: '8px 18px', borderRadius: '6px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px'
-          }
-        }
-
-        > <Printer size= {
-          16
-        }
-
-        /> Print / Save PDF </button> </>)
-    }
-
-    </div> </div> {
-      invoiceStyle==='pos' ? renderPosThermalSheet(isEdit) : renderZohoSheet(isEdit)
-    }
-
-    </div>);
-}
-
-// ============================================================================
-// DASHBOARD LIST VIEW
-// ============================================================================
-return (<div style= {
-      {
-      padding: '24px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'inherit'
-    }
-  }
 
-  > <div style= {
-      {
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff', padding: '16px 24px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '20px', flexWrap: 'wrap', gap: '12px'
-    }
-  }
-
-  > <div> <button onClick= {
-    onBack
-  }
+.th-item-sub-detail {
+  font-size: 9.5px;
+  color: #333;
+  margin-top: 1px;
+  line-height: 1.25;
+}
 
-  style= {
-      {
-      background: 'none', border: 'none', color: '#0b4ea2', fontWeight: 700, cursor: 'pointer', padding: 0, marginBottom: '4px'
-    }
-  }
+/* Totals */
+.th-totals-table {
+  width: 100%;
+  font-size: 10.5px;
+  border-collapse: collapse;
+  margin: 3px 0;
+}
 
-  > ← Back to Workspace </button> <h2 style= {
-      {
-      margin: 0, fontSize: '22px', color: '#0f172a'
-    }
-  }
+.th-totals-table td {
+  padding: 1.5px 0;
+}
 
-  >Invoices &amp; POS Bills — {
-    companyName
-  }
+.th-totals-table td.th-val {
+  text-align: right;
+  font-weight: 600;
+}
 
-  </h2> </div> <div style= {
-      {
-      display: 'flex', gap: '10px'
-    }
-  }
+.th-grand-total-row td {
+  font-size: 12px;
+  font-weight: 900;
+  padding: 3px 0;
+}
 
-  > <button onClick= {
-    ()=> {
-      setInvoiceStyle('pos'); setActiveView('create');
-    }
-  }
+/* Amount in words */
+.th-words-section {
+  margin: 6px 0;
+  font-size: 10.5px;
+  line-height: 1.3;
+}
 
-  style= {
-      {
-      background: '#0f172a', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
-    }
-  }
+.th-words-label {
+  font-weight: 800;
+  margin-bottom: 2px;
+}
 
-  > <Receipt size= {
-    18
-  }
+.th-words-text {
+  color: #111;
+  font-style: italic;
+}
 
-  /> + New POS Receipt </button> <button onClick= {
-    ()=> {
-      setInvoiceStyle('zoho'); setActiveView('create');
-    }
-  }
+/* QR Code Section */
+.th-qr-section {
+  text-align: center;
+  padding: 8px 0 4px 0;
+}
 
-  style= {
-      {
-      background: '#0b4ea2', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px'
-    }
-  }
+.th-qr-image {
+  width: 130px;
+  height: 130px;
+  margin: 0 auto;
+  display: block;
+}
 
-  > <Plus size= {
-    18
-  }
+.th-upi-logo-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 4px 0 6px 0;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 1px;
+}
 
-  /> + New Zoho Invoice </button> </div> </div> <div style= {
-      {
-      background: '#fff', borderRadius: '12px', border: '1px solid #e2e8f0', overflow: 'hidden'
-    }
-  }
+.th-upi-arrows {
+  display: inline-flex;
+  font-weight: 900;
+  font-style: italic;
+}
 
-  > <table style= {
-      {
-      width: '100%', borderCollapse: 'collapse', fontSize: '14px'
-    }
-  }
+.th-upi-green { color: #16a34a; }
+.th-upi-orange { color: #ea580c; }
 
-  > <thead> <tr style= {
-      {
-      background: '#0b4ea2', color: '#fff', textAlign: 'left'
-    }
-  }
+.th-scan-btn {
+  background: #7f1d1d;
+  color: #ffffff;
+  padding: 4px 22px;
+  border-radius: 50px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  display: inline-block;
+  margin: 2px 0 6px 0;
+}
 
-  > <th style= {
-      {
-      padding: '12px 16px'
-    }
-  }
+/* T & C */
+.th-tc-section {
+  font-size: 10px;
+  line-height: 1.35;
+  color: #111;
+}
 
-  >Invoice#</th> <th style= {
-      {
-      padding: '12px 16px'
-    }
-  }
+.th-tc-heading {
+  font-weight: 800;
+  margin-bottom: 2px;
+}
 
-  >Customer</th> <th style= {
-      {
-      padding: '12px 16px'
-    }
-  }
+.th-tc-line {
+  margin-bottom: 3px;
+}
 
-  >Format</th> <th style= {
-      {
-      padding: '12px 16px'
-    }
-  }
+/* Footer */
+.th-footer-section {
+  text-align: center;
+  padding-top: 6px;
+  font-size: 10.5px;
+}
 
-  >Date</th> <th style= {
-      {
-      padding: '12px 16px', textAlign: 'right'
-    }
-  }
+.th-powered-by {
+  font-size: 10px;
+  color: #333;
+  margin: 2px 0;
+}
 
-  >Total</th> <th style= {
-      {
-      padding: '12px 16px', textAlign: 'center'
-    }
-  }
+.th-grow-line {
+  font-size: 11px;
+  font-weight: 800;
+  margin: 2px 0 6px 0;
+}
 
-  >Status</th> <th style= {
-      {
-      padding: '12px 16px', textAlign: 'center'
-    }
-  }
+.th-maroon-banner-1 {
+  background: #7f1d1d;
+  color: #ffffff;
+  padding: 5px 8px;
+  font-weight: 800;
+  font-size: 11px;
+  margin-top: 4px;
+}
 
-  >Actions</th> </tr> </thead> <tbody> {
-    loading ? (<tr><td colSpan="7" style= {
-          {
-          padding: '30px', textAlign: 'center'
-        }
-      }
-
-      >Loading invoices...</td></tr>) : invoices.length===0 ? (<tr> <td colSpan="7" style= {
-          {
-          padding: '40px', textAlign: 'center', color: '#64748b'
-        }
-      }
-
-      > No invoices saved yet. Click <strong>+ New Zoho Invoice</strong> or <strong>+ New POS Receipt</strong> above. </td> </tr>) : (invoices.map((inv)=> (<tr key= {
-            inv._id || inv.id
-          }
-
-          onClick= {
-            ()=> {
-              setSelectedInvoice(inv);
-              setInvoiceStyle(inv.invoiceStyle || 'zoho');
-              setActiveView('view');
-            }
-          }
-
-          style= {
-              {
-              borderBottom: '1px solid #e2e8f0', cursor: 'pointer'
-            }
-          }
-
-          > <td style= {
-              {
-              padding: '12px 16px', fontWeight: 700, color: '#0b4ea2'
-            }
-          }
-
-          > {
-            inv.invoiceNumber || inv.id
-          }
-
-          </td> <td style= {
-              {
-              padding: '12px 16px', fontWeight: 600
-            }
-          }
-
-          > {
-            inv.customerName || inv.customer
-          }
-
-          </td> <td style= {
-              {
-              padding: '12px 16px'
-            }
-          }
-
-          > <span style= {
-              {
-              fontSize: '11px', padding: '2px 8px', borderRadius: '4px', background: inv.invoiceStyle==='pos' ? '#f1f5f9' : '#e0f2fe', fontWeight: 700
-            }
-          }
-
-          > {
-            inv.invoiceStyle==='pos' ? 'POS 80mm' : 'A4 Zoho'
-          }
-
-          </span> </td> <td style= {
-              {
-              padding: '12px 16px'
-            }
-          }
-
-          > {
-            inv.date
-          }
-
-          </td> <td style= {
-              {
-              padding: '12px 16px', textAlign: 'right', fontWeight: 700
-            }
-          }
-
-          > ₹ {
-            Number(inv.grandTotal || inv.totalAmount || 0).toLocaleString('en-IN', {
-              minimumFractionDigits: 2
-            })
-        }
-
-        </td> <td style= {
-            {
-            padding: '12px 16px', textAlign: 'center'
-          }
-        }
-
-        > <span style= {
-            {
-            padding: '4px 10px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, background: inv.status==='Paid' ? '#dcfce7' : '#dbeafe', color: inv.status==='Paid' ? '#166534' : '#1e40af'
-          }
-        }
-
-        > {
-          inv.status || 'Paid'
-        }
-
-        </span> </td> <td style= {
-            {
-            padding: '12px 16px', textAlign: 'center'
-          }
-        }
-
-        onClick= {
-          (e)=> e.stopPropagation()
-        }
-
-        > <button onClick= {
-          ()=> {
-            setSelectedInvoice(inv);
-            setInvoiceStyle('zoho');
-            setActiveView('view');
-          }
-        }
-
-        style= {
-            {
-            marginRight: '6px', padding: '5px 8px', background: '#e0f2fe', color: '#0369a1', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, fontSize: '12px'
-          }
-        }
-
-        > A4 View </button> <button onClick= {
-          ()=> {
-            setSelectedInvoice(inv);
-            setInvoiceStyle('pos');
-            setActiveView('view');
-          }
-        }
-
-        style= {
-            {
-            marginRight: '6px', padding: '5px 8px', background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', fontWeight: 600, fontSize: '12px'
-          }
-        }
-
-        > POS View </button> <button onClick= {
-          async ()=> {
-            if (window.confirm('Delete this invoice?')) {
-              await invoiceApi.delete(inv._id || inv.id);
-              loadInvoices();
-            }
-          }
-        }
-
-        style= {
-            {
-            padding: '5px 8px', background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '12px'
-          }
-        }
-
-        > Delete </button> </td> </tr>)))
-}
-
-</tbody> </table> </div> </div>);
+.th-maroon-banner-2 {
+  background: #7f1d1d;
+  color: #ffffff;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 2px;
 }

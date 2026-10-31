@@ -1,3 +1,5 @@
+@import './InvoiceManagement.css';
+
 .pos-wrapper {
   padding: 1.5rem;
   background-color: #f4f6fa;
@@ -434,4 +436,66 @@
   margin-top: 1rem;
   font-size: 0.7rem;
   color: #888;
+}
+
+@media print {
+  @page {
+    margin: 4mm;
+  }
+  body, html {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .pos-wrapper {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    min-height: auto !important;
+    display: block !important;
+    position: static !important;
+    overflow: visible !important;
+    width: 100% !important;
+  }
+  .pos-top-bar,
+  .pos-topbar,
+  .pos-left-col,
+  .pos-mid-col,
+  .pos-bottom-actions,
+  .pos-top-actions,
+  .app-sidebar,
+  .navbar,
+  .mobile-bottom-nav,
+  .no-print,
+  nav,
+  aside,
+  header {
+    display: none !important;
+    visibility: hidden !important;
+  }
+  .pos-grid {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  .pos-right-col {
+    display: block !important;
+    width: 76mm !important;
+    max-width: 76mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+  }
+  .thermal-receipt-container {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    width: 76mm !important;
+    max-width: 76mm !important;
+    margin: 0 auto !important;
+    padding: 2mm 3mm !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
 }

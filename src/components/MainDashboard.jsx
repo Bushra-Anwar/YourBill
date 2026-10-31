@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LayoutDashboard, UsersRound, FileText, FilePenLine, CreditCard, ShoppingCart, Bell, Files, Package, Warehouse, BookOpen, Landmark, BarChart3, Sparkles, Settings, RefreshCw, ShieldCheck, Rocket, Menu as MenuIcon, X, Search, Crown, House, ReceiptText, Boxes, CircleDollarSign, Moon, Sun, SlidersHorizontal, Users, Building2 } from 'lucide-react';
+import { LayoutDashboard, UsersRound, FileText, FilePenLine, CreditCard, ShoppingCart, Bell, Files, Package, Warehouse, BookOpen, Landmark, BarChart3, Sparkles, Settings, RefreshCw, ShieldCheck, Rocket, Menu as MenuIcon, X, Search, Crown, House, ReceiptText, Boxes, CircleDollarSign, Moon, Sun, SlidersHorizontal, Users, Building2, Printer, Receipt } from 'lucide-react';
 import './MainDashboard.css';
 import SubscriptionDemo from './SubscriptionDemo';
 import POSBilling from './POSBilling';
@@ -32,6 +32,9 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
   const profileMenuRef = useRef(null);
   const [trialClock, setTrialClock] = useState(0);
   const [billingMode, setBillingMode] = useState('standard'); // 'standard' or 'pos'
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [printModalInvoice, setPrintModalInvoice] = useState(null);
+  const [printFormat, setPrintFormat] = useState('standard'); // 'standard' | 'thermal'
 
   const [customersList, setCustomersList] = useState([]);
   const [productsList, setProductsList] = useState([]);
@@ -221,6 +224,81 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
     setActiveMenu('sale-invoice');
   };
 
+  const getCompanyDetails = () => {
+    let stored = null;
+    try {
+      const raw = localStorage.getItem('currentUser') || localStorage.getItem('user') || localStorage.getItem('companyProfile');
+      if (raw) stored = JSON.parse(raw);
+    } catch { /* ignore */ }
+
+    const combined = { ...stored, ...user };
+
+    return {
+      companyName: combined?.companyName || combined?.shopName || combined?.businessName || combined?.name || 'Ravi kumar',
+      ownerName: combined?.name || combined?.ownerName || 'Ravi kumar',
+      phone: combined?.phone || '9508399874',
+      email: combined?.email || 'ravikumar124dubey@gmail.com',
+      address: combined?.address || [combined?.city, combined?.state, combined?.pincode].filter(Boolean).join(', ') || 'Gaur City 2, Ghaziabaad , UP',
+      city: combined?.city || 'Ghaziabad',
+      state: combined?.state || 'UP',
+      pincode: combined?.pincode || '',
+      gstin: combined?.gstin || '',
+      tagline: combined?.tagline || 'Best From Best',
+      bankDetails: {
+        accountHolder: combined?.bankDetails?.accountHolder || combined?.bankAccountHolder || combined?.name || 'Rahul',
+        accountNumber: combined?.bankDetails?.accountNumber || combined?.accountNumber || '12345678910',
+        bankName: combined?.bankDetails?.bankName || combined?.bankName || 'Axis',
+        branch: combined?.bankDetails?.branch || combined?.branch || 'Delhi',
+        ifsc: combined?.bankDetails?.ifsc || combined?.ifsc || 'Axis00',
+        upiId: combined?.bankDetails?.upiId || combined?.upiId || (combined?.phone ? `${combined.phone}@upi` : '1234567890@upi')
+      }
+    };
+  };
+
+  const formatInvoiceDate = (dateVal) => {
+    const d = dateVal ? new Date(dateVal) : new Date();
+    const day = d.getDate();
+    const month = d.toLocaleDateString('en-IN', { month: 'short' });
+    const year = d.getFullYear();
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12 || 12;
+    const hourStr = String(hours).padStart(2, '0');
+    return `${day} ${month}, ${year} ${hourStr}:${minutes} ${ampm}`;
+  };
+
+  const formatThermalDate = (dateVal) => {
+    const d = dateVal ? new Date(dateVal) : new Date();
+    const dd = String(d.getDate()).padStart(2, '0');
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const yyyy = d.getFullYear();
+    const time = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return { date: `${dd}/${mm}/${yyyy}`, time };
+  };
+
+  const numberToWordsIndian = (num) => {
+    const nNum = Math.round(Number(num) || 0);
+    if (nNum <= 0) return 'Zero Rupees Only';
+    const a = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const b = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+    const n = ('000000000' + nNum).substr(-9).match(/^(\d{2})(\d{2})(\d{2})(\d{1})(\d{2})$/);
+    if (!n) return `${nNum} Rupees Only`;
+    let str = '';
+    str += (Number(n[1]) !== 0) ? (a[Number(n[1])] || b[n[1][0]] + ' ' + a[n[1][1]]) + ' Crore ' : '';
+    str += (Number(n[2]) !== 0) ? (a[Number(n[2])] || b[n[2][0]] + ' ' + a[n[2][1]]) + ' Lakh ' : '';
+    str += (Number(n[3]) !== 0) ? (a[Number(n[3])] || b[n[3][0]] + ' ' + a[n[3][1]]) + ' Thousand ' : '';
+    str += (Number(n[4]) !== 0) ? (a[Number(n[4])] || b[n[4][0]] + ' ' + a[n[4][1]]) + ' Hundred ' : '';
+    str += (Number(n[5]) !== 0) ? ((str !== '') ? 'and ' : '') + (a[Number(n[5])] || b[n[5][0]] + ' ' + a[n[5][1]]) : '';
+    return str.trim() ? str.trim() + ' Rupees Only' : 'Zero Rupees Only';
+  };
+
+  const getUPIQrUrl = (upiId, compName, amount, billNo) => {
+    const upiIntent = `upi://pay?pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(compName)}&am=${Number(amount || 0).toFixed(2)}&cu=INR&tn=${encodeURIComponent('Bill ' + billNo)}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(upiIntent)}`;
+  };
+
   const handleSaveAndPrint = async () => {
     const cleanCustomerName = customerName.trim();
     if (!cleanCustomerName) {
@@ -274,9 +352,9 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
     };
 
     try {
-      await invoiceApi.create(payload);
-      alert('✅ Invoice successfully saved to Database!');
-      window.print();
+      const saved = await invoiceApi.create(payload);
+      setPrintModalInvoice(saved);
+      setShowPrintModal(true);
       setCustomerName('');
       setPhoneNumber('');
       setGstin('');
@@ -581,7 +659,7 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
           )}
 
           {activeMenu === 'sale-invoice' && billingMode === 'standard' && (
-            <div className="billing-screen-content fade-in">
+            <div className={`billing-screen-content fade-in ${showPrintModal ? 'no-print' : ''}`}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <button className="back-btn" onClick={() => setActiveMenu('dashboard')} style={{ background: 'transparent', color: 'var(--text-main)', border: '1px solid var(--glass-border)', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   ← Back to Dashboard
@@ -816,6 +894,330 @@ const MainDashboard = ({ setActiveTab, theme, toggleTheme }) => {
           <span>Menu</span>
         </div>
       </div>
+
+      {/* Invoice Print & Preview Modal */}
+      {showPrintModal && printModalInvoice && (() => {
+        const company = getCompanyDetails();
+        const inv = printModalInvoice;
+        const invId = inv.invoiceNumber || inv.id || '62';
+        const custName = inv.customerName || 'Customer';
+        const custPhone = inv.customerPhone || '';
+        const custGstin = inv.customerGstin || '';
+        const formattedInvDate = formatInvoiceDate(inv.date);
+        const thDate = formatThermalDate(inv.date);
+        const invItems = Array.isArray(inv.items) && inv.items.length > 0 ? inv.items : [];
+        const totalQty = invItems.reduce((sum, item) => sum + (Number(item.qty || item.quantity) || 1), 0);
+        const sub = Number(inv.subtotal || 0);
+        const totalTax = Number(inv.totalTax || 0);
+        const cgst = totalTax / 2;
+        const sgst = totalTax / 2;
+        const totalAmt = Number(inv.grandTotal || inv.totalAmount || 0);
+        const discountAmt = Number(inv.discount || 0);
+        const receivedAmt = Number(inv.paidAmount || 0);
+        const balance = Math.max(0, totalAmt - receivedAmt);
+
+        return (
+          <div className="print-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 9999, overflowY: 'auto', padding: '20px', display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+            <div className="print-modal-content" style={{ background: '#fff', borderRadius: '12px', padding: '20px', maxWidth: '860px', width: '100%', position: 'relative' }}>
+              <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                <div className="bill-format-toggle">
+                  <button
+                    type="button"
+                    className={`bill-format-btn ${printFormat === 'standard' ? 'active' : ''}`}
+                    onClick={() => setPrintFormat('standard')}
+                  >
+                    <FileText size={15} /> 📄 Tax Invoice (A4)
+                  </button>
+                  <button
+                    type="button"
+                    className={`bill-format-btn ${printFormat === 'thermal' ? 'active' : ''}`}
+                    onClick={() => setPrintFormat('thermal')}
+                  >
+                    <Receipt size={15} /> 🧾 Thermal Slip (POS)
+                  </button>
+                </div>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    className="btn-primary"
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+                    onClick={() => window.print()}
+                  >
+                    <Printer size={16} /> 🖨️ Print Now
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    style={{ padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', border: '1px solid #cbd5e1' }}
+                    onClick={() => setShowPrintModal(false)}
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+              </div>
+
+              {printFormat === 'thermal' ? (
+                /* Thermal Receipt (Image 2) */
+                <div className="thermal-receipt-container">
+                  <div className="th-header">
+                    <div className="th-logo-square">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z" />
+                      </svg>
+                    </div>
+                    <div className="th-company-title">{company.companyName}</div>
+                    <div className="th-address-line">{company.address}</div>
+                    <div className="th-tagline">{company.tagline}</div>
+                    <div className="th-phone-line">{company.phone}</div>
+                    <div className="th-email-line">Email - {company.email}</div>
+                  </div>
+
+                  <hr className="th-dashed-separator" />
+
+                  <table className="th-meta-table">
+                    <tbody>
+                      <tr><td className="th-meta-label">Bill No #:</td><td className="th-meta-val">{invId}</td></tr>
+                      <tr><td className="th-meta-label">ITEM:</td><td className="th-meta-val">{invItems.map((_, i) => `ITEM110${i}`).join(', ') || 'ITEM1100'}</td></tr>
+                      <tr><td className="th-meta-label">Date:</td><td className="th-meta-val">{thDate.date}</td></tr>
+                      <tr><td className="th-meta-label">Time:</td><td className="th-meta-val">{thDate.time}</td></tr>
+                      <tr><td className="th-meta-label">Customer Type:</td><td className="th-meta-val">RETAIL</td></tr>
+                      <tr><td className="th-meta-label">Order Status:</td><td className="th-meta-val">COMPLETED</td></tr>
+                      <tr><td className="th-meta-label">Payment Method:</td><td className="th-meta-val">CASH</td></tr>
+                      <tr><td className="th-meta-label">Payment Status:</td><td className="th-meta-val">PAID</td></tr>
+                      <tr><td className="th-meta-label">Staff Name:</td><td className="th-meta-val">OWNER</td></tr>
+                      <tr><td className="th-meta-label">Created By:</td><td className="th-meta-val">{company.ownerName.toUpperCase()}</td></tr>
+                    </tbody>
+                  </table>
+
+                  <div className="th-billing-heading">Billing To</div>
+                  <table className="th-meta-table">
+                    <tbody>
+                      <tr><td className="th-meta-label">Name:</td><td className="th-meta-val">{custName}</td></tr>
+                      <tr><td className="th-meta-label">Contact No.:</td><td className="th-meta-val">{custPhone || '9999999999'}</td></tr>
+                      <tr><td className="th-meta-label">GSTIN.:</td><td className="th-meta-val">{custGstin || company.gstin || 'GSTIN859612356'}</td></tr>
+                    </tbody>
+                  </table>
+
+                  <hr className="th-dashed-separator" />
+
+                  <table className="th-items-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '45%' }}>Items</th>
+                        <th className="th-center" style={{ width: '18%' }}>Qty</th>
+                        <th className="th-right" style={{ width: '17%' }}>Price</th>
+                        <th className="th-right" style={{ width: '20%' }}>Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {invItems.map((it, idx) => {
+                        const qty = Number(it.qty || it.quantity) || 1;
+                        const rate = Number(it.rate || it.price) || 0;
+                        const taxRate = Number(it.taxRate !== undefined ? it.taxRate : (it.tax !== undefined ? it.tax : 0));
+                        const mrp = Number(it.mrp || Math.round(rate * 1.1) || rate);
+                        const itemAmt = Number(it.amount || (qty * rate) + (qty * rate * taxRate / 100));
+
+                        return (
+                          <tr key={idx} className="th-item-main-row">
+                            <td>
+                              <div className="th-item-name">{it.name}</div>
+                              <div className="th-item-sub-detail">MRP ₹{mrp}</div>
+                              <div className="th-item-sub-detail">GST: {taxRate}%</div>
+                            </td>
+                            <td className="th-center" style={{ verticalAlign: 'middle' }}>{qty} {it.unit || 'Piece'}</td>
+                            <td className="th-right" style={{ verticalAlign: 'middle' }}>{rate}</td>
+                            <td className="th-right" style={{ verticalAlign: 'middle', fontWeight: 'bold' }}>{itemAmt.toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  <hr className="th-dashed-separator" />
+
+                  <table className="th-totals-table">
+                    <tbody>
+                      <tr><td>Item Total:</td><td className="th-val">₹{Math.round(sub)}</td></tr>
+                      {discountAmt > 0 && <tr><td>Bill Discount:</td><td className="th-val">- ₹{discountAmt.toFixed(2)}</td></tr>}
+                      <tr><td>Subtotal:</td><td className="th-val">₹{(sub - discountAmt).toFixed(2)}</td></tr>
+                      <tr><td>CGST:</td><td className="th-val">₹{cgst.toFixed(2)}</td></tr>
+                      <tr><td>SGST:</td><td className="th-val">₹{sgst.toFixed(2)}</td></tr>
+                      <tr className="th-grand-total-row"><td>Grand Total:</td><td className="th-val">₹{Math.round(totalAmt)}</td></tr>
+                    </tbody>
+                  </table>
+
+                  <hr className="th-dashed-separator" />
+
+                  <div className="th-words-section">
+                    <div className="th-words-label">Amount in Words</div>
+                    <div className="th-words-text">{numberToWordsIndian(totalAmt)}</div>
+                  </div>
+
+                  <div className="th-qr-section">
+                    <img src={getUPIQrUrl(company.bankDetails.upiId, company.companyName, totalAmt, invId)} alt="UPI QR" className="th-qr-image" />
+                    <div className="th-upi-logo-row">
+                      <span>UPI</span>
+                      <span className="th-upi-arrows"><span className="th-upi-green">▶</span><span className="th-upi-orange">▶</span></span>
+                    </div>
+                    <div className="th-scan-btn">SCAN TO PAY</div>
+                  </div>
+
+                  <hr className="th-dashed-separator" />
+
+                  <div className="th-tc-section">
+                    <div className="th-tc-heading">T &amp; C</div>
+                    <div className="th-tc-line">1. Goods once sold will not be taken back or exchanged.</div>
+                    <div className="th-tc-line">2. All disputes are subject to jurisdiction only.</div>
+                  </div>
+
+                  <hr className="th-dashed-separator" />
+
+                  <div className="th-footer-section">
+                    <div className="th-powered-by">Powered by <strong>{company.companyName}</strong></div>
+                    <div className="th-grow-line">Grow with {company.companyName}!</div>
+                    <div className="th-maroon-banner-1">Thank You, Visit Again.</div>
+                    <div className="th-maroon-banner-2">Feels Best</div>
+                  </div>
+                </div>
+              ) : (
+                /* Standard Tax Invoice (Image 1) */
+                <div className="standard-inv-container">
+                  <div className="standard-inv-watermark-top">ORIGINAL FOR RECIPIENT</div>
+
+                  <div className="standard-inv-box">
+                    <div className="std-header-section">
+                      <h1 className="std-company-name">{company.companyName}</h1>
+                      <div className="std-header-text">Phone: {company.phone}</div>
+                      <div className="std-header-text">Email: {company.email}</div>
+                      {company.gstin && <div className="std-header-text">GSTIN: {company.gstin}</div>}
+                    </div>
+
+                    <div className="std-meta-row">
+                      <div className="std-meta-col-left">
+                        <div className="std-section-title">BILL TO</div>
+                        <div className="std-meta-line" style={{ fontWeight: 600 }}>{custName}</div>
+                        <div className="std-meta-line">Phone: {custPhone || '5846984584'}</div>
+                        {custGstin && <div className="std-meta-line">GSTIN: {custGstin}</div>}
+                      </div>
+                      <div className="std-meta-col-right">
+                        <div className="std-meta-line"><strong>Invoice No:</strong> {invId}</div>
+                        <div className="std-meta-line"><strong>Invoice Date:</strong> {formattedInvDate}</div>
+                      </div>
+                    </div>
+
+                    <table className="std-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: '4%', textAlign: 'center' }}>#</th>
+                          <th style={{ width: '28%', textAlign: 'left' }}>Items</th>
+                          <th style={{ width: '8%', textAlign: 'center' }}>HSN</th>
+                          <th style={{ width: '12%', textAlign: 'left' }}>Quantity</th>
+                          <th style={{ width: '11%', textAlign: 'left' }}>MRP</th>
+                          <th style={{ width: '14%', textAlign: 'left' }}>Rate Per Unit</th>
+                          <th style={{ width: '11%', textAlign: 'left' }}>Tax Per Unit</th>
+                          <th style={{ width: '12%', textAlign: 'right' }}>Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {invItems.map((it, idx) => {
+                          const qty = Number(it.qty || it.quantity) || 1;
+                          const rate = Number(it.rate || it.price) || 0;
+                          const taxRate = Number(it.taxRate !== undefined ? it.taxRate : (it.tax !== undefined ? it.tax : 3));
+                          const mrp = Number(it.mrp || (rate > 0 ? Math.round(rate) : 0));
+                          const taxPerUnit = (rate * taxRate) / 100;
+                          const rowAmt = Number(it.amount || (qty * rate) + (qty * taxPerUnit));
+                          const unit = it.unit || 'Piece';
+
+                          return (
+                            <tr key={idx}>
+                              <td style={{ textAlign: 'center' }}>{idx + 1}</td>
+                              <td>
+                                <div className="std-item-cell">
+                                  <div className="std-item-thumb-placeholder">📷</div>
+                                  <span className="std-item-name">{it.name}</span>
+                                </div>
+                              </td>
+                              <td style={{ textAlign: 'center' }}>{it.hsnCode || ''}</td>
+                              <td>{qty} {unit}</td>
+                              <td>₹{mrp > 0 ? mrp : rate}</td>
+                              <td>₹{rate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                              <td>₹{taxPerUnit.toFixed(2)} ({taxRate})</td>
+                              <td style={{ textAlign: 'right', fontWeight: 600 }}>
+                                ₹{rowAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="std-total-row">
+                          <td colSpan={3} style={{ textAlign: 'right', borderRight: '1.5px solid #2d3748' }}>
+                            <strong>Total</strong>
+                          </td>
+                          <td style={{ borderRight: '1.5px solid #2d3748' }}>
+                            <strong>{totalQty.toFixed(2)}</strong>
+                          </td>
+                          <td style={{ borderRight: '1.5px solid #2d3748' }}></td>
+                          <td style={{ borderRight: '1.5px solid #2d3748' }}></td>
+                          <td style={{ borderRight: '1.5px solid #2d3748' }}></td>
+                          <td style={{ textAlign: 'right' }}>
+                            <strong>₹{totalAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+
+                    <div className="std-received-row">
+                      <div className="std-received-left">
+                        Received Amount: ₹{receivedAmt.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      <div className="std-received-right">
+                        Balance: ₹{balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                    </div>
+
+                    <div className="std-remark-row">
+                      <strong>Remark:</strong> {inv.notes || ''}
+                    </div>
+
+                    <div className="std-bottom-row">
+                      <div className="std-terms-col">
+                        <h4>Terms &amp; Conditions</h4>
+                        <p>Term 1: Goods once sold will not be taken back or exchanged.</p>
+                        <p>Term 2: Interest @18% p.a. will be charged if payment is not received within 15 days.</p>
+                      </div>
+                      <div className="std-bank-col">
+                        <h4>Bank Details</h4>
+                        <div className="std-bank-info-grid">
+                          <div className="std-bank-lines">
+                            <div><strong>Account holder:</strong> {company.bankDetails.accountHolder}</div>
+                            <div><strong>Account number:</strong> {company.bankDetails.accountNumber}</div>
+                            <div><strong>Bank:</strong> {company.bankDetails.bankName}</div>
+                            <div><strong>Branch:</strong> {company.bankDetails.branch}</div>
+                            <div><strong>IFSC code:</strong> {company.bankDetails.ifsc}</div>
+                            <div><strong>UPI ID:</strong> {company.bankDetails.upiId}</div>
+                          </div>
+                          <div className="std-qr-box">
+                            <div className="std-qr-label" style={{ marginBottom: '4px' }}><strong>UPI QR:</strong></div>
+                            <img
+                              src={getUPIQrUrl(company.bankDetails.upiId, company.companyName, totalAmt, invId)}
+                              alt="UPI QR Code"
+                              className="std-qr-img"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="std-outer-footer">
+                    <p>Thank You For Your Business !</p>
+                    <p>Design By {company.companyName}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
